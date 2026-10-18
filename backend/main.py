@@ -1,23 +1,26 @@
 import os
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from database import get_db_connection
 
 app = FastAPI()
 
-# Enable CORS so your frontend HTML page can securely talk to this server
+# Enable CORS so your frontend HTML pages can talk to this server securely
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all local browser files to connect
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create an uploads folder on your laptop to save incoming garbage photos
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Expose the uploads folder so the admin panel can view image URLs directly
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 class UserRegister(BaseModel):
     name: str
@@ -36,7 +39,6 @@ def register_user(user: UserRegister):
             cursor.execute("SELECT user_id FROM users WHERE email = %s", (user.email,))
             if cursor.fetchone():
                 raise HTTPException(status_code=400, detail="Email is already registered!")
-            
             sql = "INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)"
             cursor.execute(sql, (user.name, user.email, user.password_hash))
             connection.commit()
@@ -46,7 +48,6 @@ def register_user(user: UserRegister):
     finally:
         connection.close()
 
-# --- NEW PORTAL REPORT ROUTER ---
 @app.post("/report")
 async def create_report(
     file: UploadFile = File(...),
@@ -54,13 +55,11 @@ async def create_report(
     latitude: float = Form(...),
     longitude: float = Form(...)
 ):
-    """Receives garbage details from your frontend page and logs it directly to MySQL."""
-    # 1. Save the uploaded file image to your laptop drive
+    # Save image file to local drive folder path
     file_location = os.path.join(UPLOAD_DIR, file.filename)
     with open(file_location, "wb") as buffer:
         buffer.write(await file.read())
 
-    # 2. Open the bridge and insert data into your MySQL filing cabinet
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
@@ -68,11 +67,40 @@ async def create_report(
                 INSERT INTO reports (user_id, image_path, category_id, confidence, latitude, longitude, address, status) 
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """
-            # user_id=None (anonymous citizen), category_id=None (AI hasn't classified it yet), confidence=0.0
             cursor.execute(sql, (None, file_location, None, 0.0, latitude, longitude, address, 'reported'))
             connection.commit()
-            
         return {"status": "success", "message": "Report logged successfully!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        connection.close()
+
+# --- NEW PORTAL ADMIN ROUTINES ---
+
+@app.get("/admin/reports")
+def get_all_reports():
+    """Fetches every single complaint row from MySQL database for display."""
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT report_id, image_path, address, latitude, longitude, status FROM reports ORDER BY report_id DESC")
+            result = cursor.fetchall()
+            return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        connection.close()
+
+@app.put("/report/{report_id}/status")
+def update_report_status(report_id: int, status: str):
+    """Allows municipal workers to mark a report as 'cleaned' inside MySQL."""
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = "UPDATE reports SET status = %s WHERE report_id = %s"
+            cursor.execute(sql, (status, report_id))
+            connection.commit()
+        return {"status": "success", "message": f"Report {report_id} status updated to {status}."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
