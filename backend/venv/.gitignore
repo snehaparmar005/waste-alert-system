@@ -1,22 +1,14 @@
-# Block sensitive local environment credentials
-backend/.env
+# Ignore virtual environment folders
+Scripts/
+Include/
+Lib/
+share/
+pyvenv.cfg
+
+# Ignore environment variables
 .env
 
-# Block large virtual environment dependencies
-backend/venv/
-venv/
-
-# Block node packages and local citizen upload folders
-node_modules/
-backend/uploads/
-uploads/
-
-# Block trained machine learning AI files
-*.keras
-*.h5
-__pycache__/
-*.pyc
-
-*.py[cod]
-*__pycache__*
+# Ignore all python cache files globally
 **/__pycache__/
+*.py[cod]
+*$py.class
