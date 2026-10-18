@@ -17,3 +17,6 @@ uploads/
 __pycache__/
 *.pyc
 
+.env
+**/__pycache__/
+*.py[cod]
