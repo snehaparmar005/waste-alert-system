@@ -1,0 +1,17 @@
+# Block sensitive local environment credentials
+backend/.env
+.env
+
+# Block large virtual environment dependencies
+backend/venv/
+venv/
+
+# Block node packages and local citizen upload folders
+node_modules/
+backend/uploads/
+uploads/
+
+# Block trained machine learning AI files
+*.keras
+*.h5
+
