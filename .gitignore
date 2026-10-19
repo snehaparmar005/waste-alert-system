@@ -1,0 +1,33 @@
+﻿# Environment variables
+.env
+.env.*
+!.env.example
+
+# Python virtual environment
+venv/
+backend/venv/
+env/
+.venv/
+ENV/
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*.class
+*.pyd
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE and Editor settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
