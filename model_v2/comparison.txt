@@ -1,0 +1,22 @@
+Backbone: efficientnetv2b0 | TensorFlow 2.21.0
+
+Test set               Model   Images  Accuracy Macro-F1  Haz.precis.   Haz.recall
+----------------------------------------------------------------------------------
+Old test split         v1        2333    97.47%    0.958        0.925        0.958
+Old test split         v2        2333    99.19%    0.987        0.972        0.993
+New-data test split    (no images, skipped)
+Your phone photos      (no images, skipped)
+
+RESULT: v2 is BETTER (average accuracy 99.19% vs 97.47%). Use the files in model_v2/.
+
+Detailed v2 reports:
+--- Old test split (v2) ---
+                   precision    recall  f1-score   support
+
+    Biodegradable       0.98      0.98      0.98       440
+        Hazardous       0.97      0.99      0.98       142
+Non-biodegradable       1.00      0.99      0.99      1751
+
+         accuracy                           0.99      2333
+        macro avg       0.98      0.99      0.99      2333
+     weighted avg       0.99      0.99      0.99      2333
