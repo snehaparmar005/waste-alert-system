@@ -1,88 +1,97 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 export default function MyReportsTimeline() {
-  const [userReports, setUserReports] = useState([]);
+  const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedReport, setSelectedReport] = useState(null);
 
-  // Automatically fetch reports from the backend database
   useEffect(() => {
-    fetch('http://127.0.0')
+    fetch("/api/reports")
       .then((res) => res.json())
       .then((data) => {
-        setUserReports(data);
+        setReports(data);
         setLoading(false);
       })
-      .catch((err) => {
-        console.error("Timeline retrieval fault:", err);
-        setLoading(false);
-      });
+      .catch(() => setLoading(false));
   }, []);
 
-  const getStatusStyle = (status) => {
-    const designs = {
-      reported: 'bg-blue-50 text-blue-700 border-blue-200',
-      alert_sent: 'bg-purple-50 text-purple-700 border-purple-200',
-      assigned: 'bg-amber-50 text-amber-700 border-amber-200',
-      cleaned: 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    };
-    return designs[status] || 'bg-slate-50 text-slate-700 border-slate-200';
-  };
-
   return (
-    <div className="max-w-md mx-auto bg-white min-h-[75vh] p-6 shadow-xl rounded-2xl border border-slate-200 mt-2">
-      <header className="flex items-center space-x-3 mb-6 border-b pb-4">
-        <div className="bg-emerald-100 p-2.5 rounded-xl text-xl">📋</div>
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-xl font-black text-slate-800 tracking-tight">My Historical Reports</h1>
-          <p className="text-xs text-gray-500 font-medium">Track your cleanup timelines feed</p>
+          <h1 className="text-2xl font-bold text-gray-800">My Waste Reports</h1>
+          <p className="text-sm text-gray-500">Live status of your submitted complaints</p>
         </div>
-      </header>
+        <Link
+          to="/report"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+        >
+          + New Report
+        </Link>
+      </div>
 
       {loading ? (
-        <div className="p-16 text-center text-sm font-semibold text-slate-400 animate-pulse">
-          Retrieving timeline records...
-        </div>
+        <p className="text-sm text-gray-500">Loading reports from server...</p>
       ) : (
         <div className="space-y-4">
-          {userReports.map((report) => (
-            <div 
-              key={report.report_id} 
-              className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col space-y-3"
+          {reports.map((r) => (
+            <div
+              key={r.id}
+              onClick={() => setSelectedReport(r)}
+              className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:border-emerald-400 cursor-pointer transition flex justify-between items-center"
             >
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Token ID</span>
-                  <span className="font-mono font-bold text-slate-800 text-sm">#CR-{report.report_id}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-gray-800">Report #{r.id}</span>
+                  <span className="text-xs bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full font-medium">
+                    {r.waste_type}
+                  </span>
+                  <span className="text-xs text-gray-400">• {r.ward}</span>
                 </div>
-                <span className={`text-[10px] px-2.5 py-1 rounded-full font-black border uppercase tracking-wider ${getStatusStyle(report.status)}`}>
-                  {report.status ? report.status.replace('_', ' ') : 'reported'}
-                </span>
+                <p className="text-sm text-gray-600 mt-1">{r.remarks || "No landmark notes provided."}</p>
+                <p className="text-xs text-gray-400 mt-1">📍 {r.coordinates} • {r.created_at}</p>
               </div>
 
-              {/* Image Preview inside Timeline Card */}
-              {report.image_path && (
-                <div className="w-full h-32 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                  <img 
-                    src={`http://127.0.0{report.image_path}`} 
-                    alt="Evidence Preview" 
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
-
-              <div className="text-xs space-y-1">
-                <p className="text-slate-700"><strong>Category:</strong> <span className="text-emerald-700 font-bold">{report.category}</span></p>
-                <p className="text-slate-500 truncate"><strong>Location:</strong> {report.address || 'Gwalior Ward'}</p>
-              </div>
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  r.status === "Cleaned"
+                    ? "bg-green-100 text-green-700"
+                    : r.status === "Assigned"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-red-100 text-red-700"
+                }`}
+              >
+                {r.status}
+              </span>
             </div>
           ))}
+        </div>
+      )}
 
-          {userReports.length === 0 && (
-            <div className="py-16 text-center flex flex-col items-center justify-center space-y-2">
-              <span className="text-4xl">📭</span>
-              <p className="text-sm font-bold text-slate-400">You haven't filed any cleanup requests yet.</p>
+      {/* Detail Modal */}
+      {selectedReport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">Report #{selectedReport.id} Details</h2>
+              <button onClick={() => setSelectedReport(null)} className="text-gray-400 hover:text-gray-700 font-bold">✕</button>
             </div>
-          )}
+            <div className="space-y-2 text-sm text-gray-600">
+              <p><strong>Category:</strong> {selectedReport.waste_type}</p>
+              <p><strong>Ward:</strong> {selectedReport.ward}</p>
+              <p><strong>Coordinates:</strong> {selectedReport.coordinates}</p>
+              <p><strong>Remarks:</strong> {selectedReport.remarks}</p>
+              <p><strong>Date:</strong> {selectedReport.created_at}</p>
+              <p><strong>Current Status:</strong> <span className="font-bold text-emerald-700">{selectedReport.status}</span></p>
+            </div>
+            <button
+              onClick={() => setSelectedReport(null)}
+              className="w-full bg-gray-800 text-white py-2 rounded-lg text-sm font-semibold"
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
     </div>

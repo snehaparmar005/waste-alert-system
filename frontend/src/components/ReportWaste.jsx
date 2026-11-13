@@ -1,173 +1,191 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function ReportWaste() {
-  const [image, setImage] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [location, setLocation] = useState({ latitude: null, longitude: null });
-  const [locStatus, setLocStatus] = useState('Idle');
+  const [wasteType, setWasteType] = useState("Plastic");
+  const [ward, setWard] = useState("Ward 12 - Morar");
+  const [coordinates, setCoordinates] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [aiResult, setAiResult] = useState(null);
-
-  // Automatically request device GPS coordinates when page mounts
-  useEffect(() => {
-    if ('geolocation' in navigator) {
-      setLocStatus('Fetching GPS coordinates...');
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
-          setLocStatus('GPS Coordinates Captured Successfully ✅');
-        },
-        (error) => {
-          setLocStatus(`Error: ${error.message}. Please enable location permissions.`);
-        },
-        { enableHighAccuracy: true }
-      );
-    } else {
-      setLocStatus('Geolocation is not supported by your browser.');
-    }
-  }, []);
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImage(file);
-      setPreviewUrl(URL.createObjectURL(file));
+      setPreview(URL.createObjectURL(file));
     }
+  };
+
+  const handleCaptureLocation = () => {
+    if (!navigator.geolocation) {
+      setCoordinates("26.2183, 78.1828");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(4);
+        const lng = pos.coords.longitude.toFixed(4);
+        setCoordinates(`${lat}, ${lng}`);
+      },
+      () => {
+        // Fallback coordinates if location permission is blocked
+        setCoordinates("26.2183, 78.1828");
+      }
+    );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!image || !location.latitude) {
-      alert("Please capture a waste photo and allow location permissions first.");
-      return;
-    }
-
+    setError("");
     setLoading(true);
-    setAiResult(null);
-
-    const formData = new FormData();
-    formData.append('image', image); 
-    formData.append('latitude', location.latitude);
-    formData.append('longitude', location.longitude);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/reports', {
-        method: 'POST',
-        body: formData,
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          waste_type: wasteType,
+          coordinates: coordinates || "26.2183, 78.1828",
+          ward: ward,
+          remarks: remarks,
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Server returned error status code: ${response.status}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || "Failed to submit report.");
+        setLoading(false);
+        return;
       }
 
-      const data = await response.json();
-      setAiResult(data); 
+      alert(`Report #${data.data.id} submitted! Nagar Nigam alert sent.`);
+      navigate("/my-reports");
     } catch (err) {
-      console.error("API Connection Fault:", err);
-      // Fallback mockup data if the local backend is idling during tests
-      setAiResult({
-        category: 'Non-biodegradable',
-        confidence: 0.92,
-        address: 'MITS Campus, Gwalior',
-        status: 'alert_sent'
-      });
-    } finally {
+      setError("Cannot reach backend server on port 8000.");
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white min-h-[80vh] p-6 shadow-xl rounded-2xl border border-slate-200 mt-4">
-      <header className="flex items-center space-x-3 mb-6 border-b pb-4">
-        <div className="bg-emerald-100 p-2.5 rounded-xl text-xl">📸</div>
-        <div>
-          <h1 className="text-xl font-black text-slate-800 tracking-tight">Report New Waste</h1>
-          <p className="text-xs text-gray-500 font-medium">Snap photo, notify authorities instantly</p>
-        </div>
-      </header>
+    <div className="max-w-2xl mx-auto p-6">
+      <div className="bg-white p-8 rounded-2xl shadow-md border border-gray-100">
+        <h1 className="text-2xl font-bold text-gray-800">Report Waste Issue</h1>
+        <p className="text-sm text-gray-500 mt-1 mb-6">
+          Upload a waste photo, capture GPS location, and alert Nagar Nigam.
+        </p>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Photo Selection Container */}
-        <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 flex flex-col items-center justify-center min-h-[200px]">
-          {previewUrl ? (
-            <div className="relative w-full">
-              <img src={previewUrl} alt="Preview" className="rounded-lg max-h-48 mx-auto object-cover" />
-              <button 
-                type="button" 
-                onClick={() => { setImage(null); setPreviewUrl(''); }}
-                className="absolute top-2 right-2 bg-red-600 text-white px-2.5 py-1 rounded-full text-xs font-bold shadow hover:bg-red-700"
+        {error && (
+          <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg mb-4 border border-red-200">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Photo Upload & Preview */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Waste Photo
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+            />
+            {preview && (
+              <img
+                src={preview}
+                alt="Waste Preview"
+                className="mt-3 h-48 w-full object-cover rounded-xl border border-gray-200"
+              />
+            )}
+          </div>
+
+          {/* AI / Waste Category */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Waste Category
+              </label>
+              <select
+                value={wasteType}
+                onChange={(e) => setWasteType(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
               >
-                ✕ Remove
+                <option value="Plastic">Plastic Waste</option>
+                <option value="Organic">Organic / Food Waste</option>
+                <option value="Construction">Construction Debris</option>
+                <option value="E-Waste">E-Waste</option>
+                <option value="Garbage Pile">Mixed Garbage Pile</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Municipal Ward
+              </label>
+              <select
+                value={ward}
+                onChange={(e) => setWard(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                <option value="Ward 12 - Morar">Ward 12 - Morar</option>
+                <option value="Ward 14 - City Center">Ward 14 - City Center</option>
+                <option value="Ward 15 - Lashkar">Ward 15 - Lashkar</option>
+              </select>
+            </div>
+          </div>
+
+          {/* GPS Location */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              GPS Coordinates
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                required
+                placeholder="Click Capture GPS or enter coordinates"
+                value={coordinates}
+                onChange={(e) => setCoordinates(e.target.value)}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={handleCaptureLocation}
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold px-4 py-2 rounded-lg text-xs border border-blue-200 transition"
+              >
+                📍 Capture GPS
               </button>
             </div>
-          ) : (
-            <label className="cursor-pointer block w-full py-8">
-              <span className="block text-4xl mb-2">📷</span>
-              <span className="block text-sm font-bold text-emerald-600 hover:text-emerald-700">Click to Snap or Upload Photo</span>
-              <span className="text-xs text-gray-400 mt-1 block">Launches device camera on mobile browsers</span>
-              <input 
-                type="file" 
-                accept="image/*" 
-                capture="environment" 
-                onChange={handleImageChange} 
-                className="hidden" 
-                required 
-              />
+          </div>
+
+          {/* Remarks */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Landmark / Remarks
             </label>
-          )}
-        </div>
-
-        {/* Location Box Data Card */}
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">📍 Geotagged Coordinates</span>
-          <p className="text-xs font-semibold text-slate-700 mb-2">{locStatus}</p>
-          <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-            <div className="bg-white p-2 rounded border border-slate-200">
-              <span className="text-gray-400 block text-[10px]">LATITUDE</span>
-              <span className="font-bold text-slate-800">{location.latitude || '0.0000000'}</span>
-            </div>
-            <div className="bg-white p-2 rounded border border-slate-200">
-              <span className="text-gray-400 block text-[10px]">LONGITUDE</span>
-              <span className="font-bold text-slate-800">{location.longitude || '0.0000000'}</span>
-            </div>
+            <textarea
+              rows="3"
+              placeholder="Describe the exact spot or nearby landmark..."
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
           </div>
-        </div>
 
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="w-full bg-emerald-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-md hover:bg-emerald-700 transition duration-150 disabled:opacity-50 text-sm tracking-wide uppercase"
-        >
-          {loading ? 'Analyzing Waste Class via AI...' : '🚀 Submit Report to Nagar Nigam'}
-        </button>
-      </form>
-
-      {/* Dynamic AI Results Confirmation */}
-      {aiResult && (
-        <div className="mt-6 p-4 rounded-xl border border-emerald-300 bg-emerald-50/40 space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="font-bold text-slate-800 text-sm">AI Core Processing Results</h3>
-            <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
-              {aiResult.status === 'alert_sent' ? 'Telegram Dispatched 📨' : aiResult.status}
-            </span>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-2 bg-white p-3 rounded-lg border border-slate-200 text-xs">
-            <div>
-              <span className="text-gray-400 block">Class Category:</span>
-              <span className="font-black text-emerald-700 text-sm">{aiResult.category}</span>
-            </div>
-            <div>
-              <span className="text-gray-400 block">Model Confidence:</span>
-              <span className="font-black text-slate-700 text-sm">{(aiResult.confidence * 100).toFixed(1)}%</span>
-            </div>
-          </div>
-          <p className="text-[11px] text-slate-500 font-medium">📍 <strong>Identified Area Address:</strong> {aiResult.address}</p>
-        </div>
-      )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg transition shadow-sm disabled:opacity-50"
+          >
+            {loading ? "Submitting Report..." : "Submit Waste Report"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
