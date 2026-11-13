@@ -1,12 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
+import sqlite3
 import datetime
+import os
+import shutil
 
 app = FastAPI(title="CleanGWL Waste Management Platform Engine")
 
-# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -15,7 +18,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Pydantic Schemas ---
+# Create uploads directory and serve images statically
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+DB_FILE = "click2clean.db"
+
+def get_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT, email TEXT UNIQUE, password TEXT, role TEXT
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        waste_type TEXT, coordinates TEXT, ward TEXT,
+        remarks TEXT, image_url TEXT, status TEXT, created_at TEXT
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS wards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ward TEXT, email TEXT, telegram TEXT
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS alerts (
+        id TEXT PRIMARY KEY, reportId INTEGER, ward TEXT,
+        channel TEXT, time TEXT, status TEXT
+    )""")
+
+    # Seed default demo accounts if empty
+    if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
+        c.executemany("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)", [
+            ("Aarav Sharma", "citizen@test.com", "password123", "citizen"),
+            ("Officer Verma", "officer@nagarnigam.gov.in", "password123", "gov"),
+            ("System Admin", "admin@nagarnigam.gov.in", "password123", "admin")
+        ])
+    if c.execute("SELECT COUNT(*) FROM wards").fetchone()[0] == 0:
+        c.executemany("INSERT INTO wards (ward, email, telegram) VALUES (?, ?, ?)", [
+            ("Ward 12 - Morar", "ward12.nn@gov.in", "@ward12_alert_bot"),
+            ("Ward 14 - City Center", "ward14.nn@gov.in", "@ward14_alert_bot")
+        ])
+    if c.execute("SELECT COUNT(*) FROM reports").fetchone()[0] == 0:
+        c.execute("""INSERT INTO reports (waste_type, coordinates, ward, remarks, image_url, status, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                  ("Plastic", "26.2183, 78.1828", "Ward 12 - Morar", "Near Morar Main Market crossroads.", "", "Pending", str(datetime.date.today())))
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- Schemas ---
 class UserLoginPayload(BaseModel):
     email: str
     password: str
@@ -26,11 +82,10 @@ class UserRegisterPayload(BaseModel):
     password: str
     role: Optional[str] = "citizen"
 
-class WasteReportCreate(BaseModel):
-    waste_type: str
-    coordinates: str
-    remarks: Optional[str] = None
-    ward: Optional[str] = "Ward 12 - Morar"
+class ProfileUpdateSchema(BaseModel):
+    email: str
+    name: str
+    password: Optional[str] = None
 
 class StatusUpdateSchema(BaseModel):
     status: str
@@ -43,152 +98,149 @@ class WardCreateSchema(BaseModel):
     email: str
     telegram: str
 
-# --- In-Memory Databases ---
-MOCK_ACCOUNTS_REGISTRY = {
-    "citizen@test.com": {"id": 1, "name": "Aarav Sharma", "role": "citizen", "password": "password123"},
-    "officer@nagarnigam.gov.in": {"id": 2, "name": "Officer Verma", "role": "gov", "password": "password123"},
-    "admin@nagarnigam.gov.in": {"id": 3, "name": "System Admin", "role": "admin", "password": "password123"}
-}
-
-mock_reports_db = [
-    {
-        "id": 1,
-        "waste_type": "Plastic",
-        "coordinates": "26.2183, 78.1828",
-        "ward": "Ward 12 - Morar",
-        "remarks": "Near Morar Main Market crossroads area.",
-        "status": "Pending",
-        "created_at": "2026-11-12"
-    }
-]
-
-mock_wards_db = [
-    {"id": 1, "ward": "Ward 12 - Morar", "email": "ward12.nn@gov.in", "telegram": "@ward12_alert_bot"},
-    {"id": 2, "ward": "Ward 14 - City Center", "email": "ward14.nn@gov.in", "telegram": "@ward14_alert_bot"}
-]
-
-mock_alerts_db = [
-    {"id": "AL-501", "reportId": 1, "ward": "Ward 12 - Morar", "channel": "Telegram & Email", "time": "2026-11-12 10:15 AM", "status": "Delivered"}
-]
-
-# =====================================================================
-#                          API ENDPOINTS
-# =====================================================================
-
+# --- Routes ---
 @app.get("/")
 def read_root():
-    return {"status": "CleanGWL Engine Operational"}
+    return {"status": "CleanGWL SQLite Engine Operational"}
 
-# --- Auth & Users ---
 @app.post("/api/register")
 def register_user(payload: UserRegisterPayload):
-    email_clean = payload.email.strip().lower()
-    if email_clean in MOCK_ACCOUNTS_REGISTRY:
+    conn = get_db()
+    try:
+        conn.execute("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
+                     (payload.name, payload.email.strip().lower(), payload.password, payload.role))
+        conn.commit()
+        return {"success": True}
+    except sqlite3.IntegrityError:
         raise HTTPException(status_code=400, detail="Email already registered.")
-    
-    new_id = len(MOCK_ACCOUNTS_REGISTRY) + 1
-    MOCK_ACCOUNTS_REGISTRY[email_clean] = {
-        "id": new_id,
-        "name": payload.name,
-        "role": payload.role,
-        "password": payload.password
-    }
-    return {"success": True, "message": "Account created successfully."}
+    finally:
+        conn.close()
 
 @app.post("/api/login")
 def process_login_auth(payload: UserLoginPayload):
-    email_clean = payload.email.strip().lower()
-    if email_clean not in MOCK_ACCOUNTS_REGISTRY:
-        raise HTTPException(status_code=401, detail="No registered account found with this email.")
-        
-    user_record = MOCK_ACCOUNTS_REGISTRY[email_clean]
-    if payload.password != user_record["password"]:
-        raise HTTPException(status_code=401, detail="Incorrect password.")
-        
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE email = ?", (payload.email.strip().lower(),)).fetchone()
+    conn.close()
+    if not user or user["password"] != payload.password:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
     return {
         "success": True,
-        "name": user_record["name"],
-        "email": email_clean,
-        "role": user_record["role"],
-        "token": f"session-key-{user_record['role']}"
+        "name": user["name"],
+        "email": user["email"],
+        "role": user["role"],
+        "token": f"session-key-{user['role']}"
     }
+
+@app.patch("/api/profile")
+def update_profile(payload: ProfileUpdateSchema):
+    conn = get_db()
+    if payload.password:
+        conn.execute("UPDATE users SET name = ?, password = ? WHERE email = ?",
+                     (payload.name, payload.password, payload.email))
+    else:
+        conn.execute("UPDATE users SET name = ? WHERE email = ?", (payload.name, payload.email))
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": "Profile updated successfully."}
 
 @app.get("/api/users")
 def get_all_users():
-    return [
-        {"id": info["id"], "name": info["name"], "email": email, "role": info["role"]}
-        for email, info in MOCK_ACCOUNTS_REGISTRY.items()
-    ]
+    conn = get_db()
+    rows = conn.execute("SELECT id, name, email, role FROM users").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 @app.patch("/api/users/{email}")
 def update_user_role(email: str, payload: RoleUpdateSchema):
-    if email not in MOCK_ACCOUNTS_REGISTRY:
-        raise HTTPException(status_code=404, detail="User not found.")
-    MOCK_ACCOUNTS_REGISTRY[email]["role"] = payload.role
+    conn = get_db()
+    conn.execute("UPDATE users SET role = ? WHERE email = ?", (payload.role, email))
+    conn.commit()
+    conn.close()
     return {"success": True}
 
 @app.delete("/api/users/{email}")
 def delete_user(email: str):
-    if email not in MOCK_ACCOUNTS_REGISTRY:
-        raise HTTPException(status_code=404, detail="User not found.")
-    del MOCK_ACCOUNTS_REGISTRY[email]
+    conn = get_db()
+    conn.execute("DELETE FROM users WHERE email = ?", (email,))
+    conn.commit()
+    conn.close()
     return {"success": True}
 
-# --- Reports ---
 @app.get("/api/reports")
 def get_all_reports():
-    return mock_reports_db
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM reports ORDER BY id DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 @app.post("/api/reports")
-def create_new_report(report: WasteReportCreate):
-    new_id = len(mock_reports_db) + 1
-    new_report = {
-        "id": new_id,
-        "waste_type": report.waste_type,
-        "coordinates": report.coordinates,
-        "ward": report.ward,
-        "remarks": report.remarks,
-        "status": "Pending",
-        "created_at": str(datetime.date.today())
-    }
-    mock_reports_db.append(new_report)
-    
-    # Automatically log an alert
-    mock_alerts_db.append({
-        "id": f"AL-{500 + new_id}",
-        "reportId": new_id,
-        "ward": report.ward,
-        "channel": "Telegram & Email",
-        "time": datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p"),
-        "status": "Delivered"
-    })
-    return {"success": True, "data": new_report}
+async def create_new_report(
+    waste_type: str = Form(...),
+    coordinates: str = Form(...),
+    ward: str = Form("Ward 12 - Morar"),
+    remarks: str = Form(""),
+    photo: Optional[UploadFile] = File(None)
+):
+    image_url = ""
+    if photo and photo.filename:
+        safe_name = f"{int(datetime.datetime.now().timestamp())}_{photo.filename}"
+        file_path = os.path.join("uploads", safe_name)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(photo.file, buffer)
+        image_url = f"/uploads/{safe_name}"
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""INSERT INTO reports (waste_type, coordinates, ward, remarks, image_url, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (waste_type, coordinates, ward, remarks, image_url, "Pending", str(datetime.date.today())))
+    new_id = cur.lastrowid
+
+    cur.execute("""INSERT INTO alerts (id, reportId, ward, channel, time, status)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (f"AL-{500 + new_id}", new_id, ward, "Telegram & Email",
+                 datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p"), "Delivered"))
+    conn.commit()
+    conn.close()
+    return {"success": True, "data": {"id": new_id, "image_url": image_url}}
 
 @app.patch("/api/reports/{report_id}")
 def update_report_status(report_id: int, payload: StatusUpdateSchema):
-    for report in mock_reports_db:
-        if report["id"] == report_id:
-            report["status"] = payload.status
-            return {"success": True, "message": f"Status updated to {payload.status}"}
-    raise HTTPException(status_code=404, detail="Report ID not found.")
+    conn = get_db()
+    conn.execute("UPDATE reports SET status = ? WHERE id = ?", (payload.status, report_id))
+    conn.commit()
+    conn.close()
+    return {"success": True}
 
 @app.delete("/api/reports/{report_id}")
 def delete_report(report_id: int):
-    global mock_reports_db
-    mock_reports_db = [r for r in mock_reports_db if r["id"] != report_id]
+    conn = get_db()
+    conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+    conn.commit()
+    conn.close()
     return {"success": True}
 
-# --- Wards & Alerts ---
 @app.get("/api/wards")
 def get_wards():
-    return mock_wards_db
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM wards").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 @app.post("/api/wards")
 def add_ward(payload: WardCreateSchema):
-    new_ward = {"id": len(mock_wards_db) + 1, **payload.dict()}
-    mock_wards_db.append(new_ward)
-    return {"success": True, "data": new_ward}
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO wards (ward, email, telegram) VALUES (?, ?, ?)",
+                (payload.ward, payload.email, payload.telegram))
+    new_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return {"success": True, "data": {"id": new_id, **payload.dict()}}
 
 @app.get("/api/alerts")
 def get_alerts():
-    return mock_alerts_db
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM alerts ORDER BY reportId DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

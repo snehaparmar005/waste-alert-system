@@ -26,6 +26,7 @@ export default function LoginCard({ onLoginSuccess }) {
 
       // Save token & role
       localStorage.setItem("token", data.token);
+      localStorage.setItem("userEmail", data.email);
       localStorage.setItem("userName", data.name);
       if (onLoginSuccess) onLoginSuccess(data.role);
 
