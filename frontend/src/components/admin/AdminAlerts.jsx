@@ -1,43 +1,32 @@
+// AdminAlerts.jsx
 import { useEffect, useState } from "react";
+import { apiRequest } from "../../api/client";
 
 export default function AdminAlerts() {
   const [alerts, setAlerts] = useState([]);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/alerts")
-      .then((res) => res.json())
-      .then((data) => setAlerts(data));
+    apiRequest("/api/admin/alerts").then(setAlerts).catch((err) => setError(err.message));
   }, []);
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">System Alert Delivery Logs (Live)</h1>
-
-      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+      <h1 className="text-2xl font-bold text-[#0F4C5C]">Alert Outbox & Delivery Logs</h1>
+      {error && <div role="alert" className="bg-red-50 text-red-700 p-3 rounded-xl text-sm">{error}</div>}
+      <div className="bg-white rounded-2xl shadow-sm border overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
-            <tr>
-              <th className="p-4">Alert ID</th>
-              <th className="p-4">Report</th>
-              <th className="p-4">Target Ward</th>
-              <th className="p-4">Channel</th>
-              <th className="p-4">Timestamp</th>
-              <th className="p-4">Status</th>
-            </tr>
+          <thead className="bg-gray-100 text-xs uppercase text-gray-600">
+            <tr><th className="p-4">Outbox ID</th><th className="p-4">Report</th><th className="p-4">Ward</th><th className="p-4">Channel</th><th className="p-4">Status</th></tr>
           </thead>
           <tbody className="divide-y">
-            {alerts.map((log) => (
-              <tr key={log.id}>
-                <td className="p-4 font-mono text-xs font-bold">{log.id}</td>
-                <td className="p-4 font-semibold">#{log.reportId}</td>
-                <td className="p-4">{log.ward}</td>
-                <td className="p-4">{log.channel}</td>
-                <td className="p-4 text-gray-500">{log.time}</td>
-                <td className="p-4">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                    {log.status}
-                  </span>
-                </td>
+            {alerts.map((a) => (
+              <tr key={a.id}>
+                <td className="p-4 font-mono text-xs">#{a.id}</td>
+                <td className="p-4 font-bold">Report #{a.report_id}</td>
+                <td className="p-4">{a.ward}</td>
+                <td className="p-4">{a.channel}</td>
+                <td className="p-4 uppercase text-xs font-bold">{a.delivery_status}</td>
               </tr>
             ))}
           </tbody>

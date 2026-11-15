@@ -1,91 +1,88 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { apiRequest } from "../../api/client";
 
 export default function GovReports() {
   const [reports, setReports] = useState([]);
-  const [categoryFilter, setCategoryFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [catFilter, setCatFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/reports")
-      .then((res) => res.json())
-      .then((data) => setReports(data));
+    apiRequest("/api/reports")
+      .then((data) => setReports(Array.isArray(data) ? data : []))
+      .catch((err) => setError(err.message));
   }, []);
 
+  const getCatSlug = (r) => (r.category?.slug || r.waste_type || "").toLowerCase();
+  const getCatLabel = (r) => r.category?.label || r.waste_type || "Uncategorized";
+
   const filtered = reports.filter((r) => {
-    const matchCat = categoryFilter === "All" || r.waste_type === categoryFilter;
-    const matchStatus = statusFilter === "All" || r.status === statusFilter;
+    const matchCat = catFilter === "all" || getCatSlug(r) === catFilter;
+    const matchStatus = statusFilter === "all" || (r.status || "").toLowerCase() === statusFilter;
     return matchCat && matchStatus;
   });
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <div className="flex flex-wrap justify-between items-center gap-4">
-        <h1 className="text-2xl font-bold text-gray-800">Area Waste Reports (Live)</h1>
-
+        <h1 className="text-2xl font-bold text-[#0F4C5C]">Municipal Area Reports</h1>
         <div className="flex gap-3">
           <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+            aria-label="Filter by category"
+            value={catFilter}
+            onChange={(e) => setCatFilter(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm bg-white min-h-[44px]"
           >
-            <option value="All">All Categories</option>
-            <option value="Plastic">Plastic</option>
-            <option value="Organic">Organic</option>
-            <option value="Construction">Construction</option>
-            <option value="E-Waste">E-Waste</option>
-            <option value="Garbage Pile">Garbage Pile</option>
+            <option value="all">All Categories</option>
+            <option value="biodegradable">Biodegradable</option>
+            <option value="hazardous">Hazardous</option>
+            <option value="non_biodegradable">Non-biodegradable</option>
           </select>
-
           <select
+            aria-label="Filter by status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+            className="border rounded-lg px-3 py-2 text-sm bg-white min-h-[44px]"
           >
-            <option value="All">All Statuses</option>
-            <option value="Pending">Pending</option>
-            <option value="Assigned">Assigned</option>
-            <option value="Cleaned">Cleaned</option>
+            <option value="all">All Statuses</option>
+            <option value="reported">Reported / Pending</option>
+            <option value="assigned">Assigned</option>
+            <option value="cleaned">Cleaned</option>
           </select>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+      {error && (
+        <div role="alert" className="bg-red-50 text-red-700 p-4 rounded-xl text-sm border border-red-200">
+          {error}
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
             <tr>
               <th className="p-4">ID</th>
               <th className="p-4">Category</th>
+              <th className="p-4">Confidence</th>
               <th className="p-4">Ward</th>
-              <th className="p-4">Remarks</th>
-              <th className="p-4">Date</th>
               <th className="p-4">Status</th>
               <th className="p-4">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y">
             {filtered.map((r) => (
               <tr key={r.id} className="hover:bg-gray-50">
-                <td className="p-4 font-semibold text-gray-800">#{r.id}</td>
-                <td className="p-4">{r.waste_type}</td>
-                <td className="p-4">{r.ward}</td>
-                <td className="p-4 text-gray-600">{r.remarks}</td>
-                <td className="p-4 text-gray-500">{r.created_at}</td>
+                <td className="p-4 font-bold">#{r.id}</td>
+                <td className="p-4">{getCatLabel(r)}</td>
                 <td className="p-4">
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                      r.status === "Cleaned"
-                        ? "bg-green-100 text-green-700"
-                        : r.status === "Assigned"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {r.status}
-                  </span>
+                  {typeof r.confidence === "number" ? `${(r.confidence * 100).toFixed(1)}%` : "—"}
                 </td>
+                <td className="p-4">{r.ward || "Ward 12 - Morar"}</td>
+                <td className="p-4 uppercase text-xs font-bold">{r.status}</td>
                 <td className="p-4">
-                  <Link to={`/gov/report/${r.id}`} className="text-emerald-600 font-semibold hover:underline">
+                  <Link to={`/gov/report/${r.id}`} className="text-[#0F4C5C] font-semibold hover:underline">
                     View & Update
                   </Link>
                 </td>

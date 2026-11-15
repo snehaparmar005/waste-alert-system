@@ -1,98 +1,141 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { apiRequest, saveSession } from "../api/client";
 
 export default function LoginCard({ onLoginSuccess }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const fillAccount = (demoEmail) => {
+    setEmail(demoEmail);
+    setPassword("password123");
+    setError("");
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
-     const res = await fetch("/api/login", {
+      const data = await apiRequest("/api/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.detail || "Login failed");
-        return;
-      }
+      const normalizedSession = data.user
+        ? data
+        : {
+            token: data.token,
+            user: {
+              name: data.name || email.split("@")[0],
+              email: data.email || email,
+              role: data.role,
+            },
+          };
 
-      // Save token & role
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("userEmail", data.email);
-      localStorage.setItem("userName", data.name);
-      if (onLoginSuccess) onLoginSuccess(data.role);
+      saveSession(normalizedSession);
+      onLoginSuccess(normalizedSession);
 
-      // Redirect based on backend role
-      if (data.role === "citizen") navigate("/report");
-      else if (data.role === "gov") navigate("/gov/dashboard");
-      else if (data.role === "admin") navigate("/admin/dashboard");
+      const userRole = normalizedSession.user.role;
+      if (userRole === "citizen") navigate("/report");
+      else if (userRole === "gov") navigate("/gov/dashboard");
+      else if (userRole === "admin") navigate("/admin/dashboard");
     } catch (err) {
-      setError("Cannot reach backend server. Make sure FastAPI is running on port 8000.");
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center bg-gray-50 px-4">
-      <div className="bg-white p-8 rounded-2xl shadow-md border border-gray-100 w-full max-w-md">
-        <h2 className="text-2xl font-bold text-gray-800 text-center">Welcome Back</h2>
-        <p className="text-sm text-gray-500 text-center mt-1 mb-6">Sign in to Click-2-Clean</p>
+    <div className="max-w-md mx-auto my-12 px-4">
+      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
+        <h1 className="text-2xl font-bold text-[#0F4C5C] text-center">Sign In</h1>
+        <p className="text-sm text-gray-500 text-center mt-1 mb-6">
+          Access Click-2-Clean Smart City Portal
+        </p>
 
         {error && (
-          <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg mb-4 border border-red-200">
+          <div role="alert" className="bg-red-50 text-red-700 text-xs p-3 rounded-lg mb-4 border border-red-200">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label htmlFor="login-email" className="block text-sm font-medium mb-1">Email Address</label>
             <input
+              id="login-email"
               type="email"
               required
-              placeholder="citizen@test.com"
+              placeholder="Enter your registered email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm min-h-[44px]"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label htmlFor="login-pass" className="block text-sm font-medium mb-1">Password</label>
             <input
+              id="login-pass"
               type="password"
               required
-              placeholder="password123"
+              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm min-h-[44px]"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg"
+            disabled={loading}
+            className="w-full bg-[#0F4C5C] hover:bg-[#0b3945] text-white font-semibold py-2.5 rounded-lg min-h-[44px] disabled:opacity-50"
           >
-            Login
+            {loading ? "Signing in..." : "Login"}
           </button>
         </form>
 
-        <div className="mt-5 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 space-y-1">
-          <p className="font-semibold text-gray-700">Demo Accounts (Password: password123):</p>
-          <p>• Citizen: <code>citizen@test.com</code></p>
-          <p>• Gov: <code>officer@nagarnigam.gov.in</code></p>
-          <p>• Admin: <code>admin@nagarnigam.gov.in</code></p>
+        {/* Quick-fill helpers that still authenticate via MySQL backend */}
+        <div className="mt-6 pt-4 border-t border-gray-100">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-center mb-2.5">
+            Fill Local Test Credentials
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => fillAccount("citizen@test.com")}
+              className="bg-[#EAF5EE] hover:bg-emerald-100 text-[#0F4C5C] text-xs font-semibold py-2 rounded-lg"
+            >
+              Citizen
+            </button>
+            <button
+              type="button"
+              onClick={() => fillAccount("officer@nagarnigam.gov.in")}
+              className="bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold py-2 rounded-lg"
+            >
+              Nagar Nigam
+            </button>
+            <button
+              type="button"
+              onClick={() => fillAccount("admin@nagarnigam.gov.in")}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold py-2 rounded-lg"
+            >
+              Admin
+            </button>
+          </div>
         </div>
 
         <p className="text-sm text-center text-gray-600 mt-5">
-          New here? <Link to="/register" className="text-emerald-600 font-semibold hover:underline">Sign up</Link>
+          Need a citizen account?{" "}
+          <Link to="/register" className="text-[#2E9E5B] font-semibold hover:underline">
+            Register
+          </Link>
         </p>
       </div>
     </div>

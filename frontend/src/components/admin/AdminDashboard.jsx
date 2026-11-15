@@ -1,61 +1,57 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { apiRequest } from "../../api/client";
 
 export default function AdminDashboard() {
+  const [summary, setSummary] = useState(null);
   const [reports, setReports] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/reports").then((res) => res.json()).then(setReports);
-    fetch("/api/users").then((res) => res.json()).then(setUsers);
+    Promise.all([apiRequest("/api/admin/summary"), apiRequest("/api/reports")])
+      .then(([sumData, repData]) => {
+        setSummary(sumData);
+        setReports(repData);
+      })
+      .catch((err) => setError(err.message));
   }, []);
 
-  const cleanedCount = reports.filter((r) => r.status === "Cleaned").length;
-  const cleanedRate = reports.length ? Math.round((cleanedCount / reports.length) * 100) : 0;
-
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Admin Control Center (Live)</h1>
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+      <h1 className="text-2xl font-bold text-[#0F4C5C]">Admin Master Control Center</h1>
+      {error && <div role="alert" className="bg-red-50 text-red-700 p-4 rounded-xl text-sm">{error}</div>}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-gray-500 uppercase">Total Reports</p>
-          <p className="text-3xl font-bold text-gray-800 mt-1">{reports.length}</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-gray-500 uppercase">Cleaned Rate</p>
-          <p className="text-3xl font-bold text-emerald-600 mt-1">{cleanedRate}%</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-gray-500 uppercase">Registered Users</p>
-          <p className="text-3xl font-bold text-purple-600 mt-1">{users.length}</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-gray-500 uppercase">Pending Cleanup</p>
-          <p className="text-3xl font-bold text-amber-600 mt-1">{reports.length - cleanedCount}</p>
-        </div>
-      </div>
-
-      <div className="bg-white p-5 rounded-xl shadow-sm border">
-        <div className="flex justify-between items-center mb-3">
-          <h2 className="font-bold text-gray-800">Master City Map (All Wards)</h2>
-          <div className="flex gap-3 text-sm">
-            <Link to="/admin/reports" className="text-emerald-600 font-semibold hover:underline">Reports</Link>
-            <Link to="/admin/users" className="text-emerald-600 font-semibold hover:underline">Users</Link>
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border">
+            <p className="text-xs text-gray-500 uppercase">Total Reports</p>
+            <p className="text-3xl font-bold mt-1">{summary.total_reports}</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border">
+            <p className="text-xs text-gray-500 uppercase">Cleanup Rate</p>
+            <p className="text-3xl font-bold text-[#2E9E5B] mt-1">{summary.cleanup_rate}%</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border">
+            <p className="text-xs text-gray-500 uppercase">Active Wards</p>
+            <p className="text-3xl font-bold text-[#0F4C5C] mt-1">{summary.total_wards}</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border">
+            <p className="text-xs text-gray-500 uppercase">Registered Users</p>
+            <p className="text-3xl font-bold text-amber-600 mt-1">{summary.total_users}</p>
           </div>
         </div>
+      )}
+
+      <div className="bg-white p-5 rounded-2xl shadow-sm border">
+        <h2 className="font-bold text-[#0F4C5C] mb-3">Master City Map</h2>
         <div className="h-80 rounded-xl overflow-hidden">
           <MapContainer center={[26.2183, 78.1828]} zoom={12} style={{ height: "100%", width: "100%" }}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {reports.map((r) => {
-              const pos = (r.coordinates || "26.2183, 78.1828").split(",").map(Number);
-              return (
-                <Marker key={r.id} position={pos}>
-                  <Popup>#{r.id} - {r.waste_type} ({r.status})</Popup>
-                </Marker>
-              );
-            })}
+            {reports.map((r) => (
+              <Marker key={r.id} position={[r.latitude, r.longitude]}>
+                <Popup>#{r.id} • {r.category.label} ({r.status})</Popup>
+              </Marker>
+            ))}
           </MapContainer>
         </div>
       </div>

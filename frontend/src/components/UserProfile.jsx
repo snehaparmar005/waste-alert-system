@@ -1,47 +1,60 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiRequest, getSession, saveSession } from "../api/client";
 
-export default function UserProfile() {
-  const email = localStorage.getItem("userEmail") || "citizen@test.com";
-  const [name, setName] = useState(localStorage.getItem("userName") || "Citizen User");
+export default function UserProfile({ onProfileUpdate }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [error, setError] = useState("");
 
-  const handleUpdate = async (e) => {
+  useEffect(() => {
+    apiRequest("/api/profile")
+      .then((u) => { setName(u.name); setEmail(u.email); })
+      .catch((err) => setError(err.message));
+  }, []);
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name, password: password || null }),
-    });
-    if (res.ok) {
-      localStorage.setItem("userName", name);
+    setError("");
+    setStatusMsg("");
+    try {
+      const updated = await apiRequest("/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ name, password: password || null }),
+      });
+      const current = getSession();
+      if (current) saveSession({ ...current, user: updated });
+      if (onProfileUpdate) onProfileUpdate(updated);
       setPassword("");
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setStatusMsg("Profile saved to MySQL database.");
+    } catch (err) {
+      setError(err.message);
     }
   };
 
   return (
-    <div className="max-w-lg mx-auto p-6">
-      <div className="bg-white p-8 rounded-2xl shadow-md border border-gray-100 space-y-5">
-        <h1 className="text-2xl font-bold text-gray-800">My Profile</h1>
-        {saved && <div className="bg-emerald-50 text-emerald-700 text-xs p-3 rounded-lg border border-emerald-200">Profile saved to database!</div>}
+    <div className="max-w-lg mx-auto px-4 py-8">
+      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 space-y-5">
+        <h1 className="text-2xl font-bold text-[#0F4C5C]">Account Profile</h1>
+        {error && <div role="alert" className="bg-red-50 text-red-700 text-xs p-3 rounded-lg border border-red-200">{error}</div>}
+        {statusMsg && <div role="status" className="bg-[#EAF5EE] text-[#0F4C5C] text-xs p-3 rounded-lg border border-[#2E9E5B]/30">{statusMsg}</div>}
 
-        <form onSubmit={handleUpdate} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Email (Read-Only)</label>
-            <input type="text" disabled value={email} className="w-full bg-gray-100 border rounded-lg px-3 py-2 text-sm text-gray-500" />
+            <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Email</label>
+            <input type="text" disabled value={email} className="w-full bg-gray-100 border rounded-lg px-3 py-2 text-sm text-gray-500 min-h-[44px]" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-            <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+            <label htmlFor="prof-name" className="block text-sm font-medium mb-1">Display Name</label>
+            <input id="prof-name" type="text" required value={name} onChange={(e) => setName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm min-h-[44px]" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">New Password (Leave blank to keep current)</label>
-            <input type="password" placeholder="Enter new password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+            <label htmlFor="prof-pass" className="block text-sm font-medium mb-1">New Password (Optional)</label>
+            <input id="prof-pass" type="password" minLength={6} placeholder="Leave blank to keep current" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm min-h-[44px]" />
           </div>
-          <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg">
-            Save Changes
+          <button type="submit" className="w-full bg-[#0F4C5C] text-white font-semibold py-2.5 rounded-lg min-h-[44px]">
+            Save Profile
           </button>
         </form>
       </div>

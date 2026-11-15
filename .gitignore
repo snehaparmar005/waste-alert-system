@@ -31,3 +31,13 @@ desktop.ini
 .idea/
 *.sublime-project
 *.sublime-workspace
+node_modules
+dist
+.env
+venv
+.venv
+__pycache__
+*.pyc
+*.db
+backend/uploads/*
+!backend/uploads/.gitkeep

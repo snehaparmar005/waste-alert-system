@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { apiRequest } from "../api/client";
 
 export default function RegisterCard() {
   const [formData, setFormData] = useState({ name: "", email: "", password: "" });
@@ -11,97 +12,47 @@ export default function RegisterCard() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
-     const res = await fetch("/api/register", {
+      await apiRequest("/api/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          role: "citizen",
-        }),
+        body: JSON.stringify(formData),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.detail || "Registration failed. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      alert("Account created successfully! Please log in.");
       navigate("/login");
     } catch (err) {
-      setError("Cannot reach backend server on port 8000.");
+      setError(err.message);
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center bg-gray-50 px-4">
-      <div className="bg-white p-8 rounded-2xl shadow-md border border-gray-100 w-full max-w-md">
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">Create Citizen Account</h2>
-        <p className="text-sm text-gray-500 mb-6">Join Click-2-Clean to report and track local waste.</p>
+    <div className="max-w-md mx-auto my-12 px-4">
+      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
+        <h1 className="text-2xl font-bold text-[#0F4C5C]">Create Citizen Account</h1>
+        <p className="text-sm text-gray-500 mt-1 mb-6">Join Click-2-Clean to report and track local waste.</p>
 
-        {error && (
-          <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg mb-4 border border-red-200">
-            {error}
-          </div>
-        )}
+        {error && <div role="alert" className="bg-red-50 text-red-700 text-xs p-3 rounded-lg mb-4 border border-red-200">{error}</div>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-            <input
-              type="text"
-              required
-              placeholder="Enter your name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-            />
+            <label htmlFor="reg-name" className="block text-sm font-medium mb-1">Full Name</label>
+            <input id="reg-name" type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-[44px]" />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              required
-              placeholder="you@example.com"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-            />
+            <label htmlFor="reg-email" className="block text-sm font-medium mb-1">Email</label>
+            <input id="reg-email" type="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-[44px]" />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              required
-              placeholder="Create a password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-            />
+            <label htmlFor="reg-pass" className="block text-sm font-medium mb-1">Password (min 6 characters)</label>
+            <input id="reg-pass" type="password" required minLength={6} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-[44px]" />
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50"
-          >
-            {loading ? "Creating Account..." : "Sign Up"}
+          <button type="submit" disabled={loading} className="w-full bg-[#2E9E5B] hover:bg-[#248249] text-white font-semibold py-2.5 rounded-lg min-h-[44px] disabled:opacity-50">
+            {loading ? "Creating account..." : "Sign Up"}
           </button>
         </form>
 
         <p className="text-sm text-center text-gray-600 mt-5">
-          Already have an account?{" "}
-          <Link to="/login" className="text-emerald-600 font-semibold hover:underline">
-            Login here
-          </Link>
+          Already registered? <Link to="/login" className="text-[#0F4C5C] font-semibold hover:underline">Sign in</Link>
         </p>
       </div>
     </div>
