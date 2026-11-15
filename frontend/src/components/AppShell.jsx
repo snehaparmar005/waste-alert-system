@@ -25,7 +25,8 @@ export default function AppShell({ user, onLogout, children }) {
       <header className="bg-[#0F4C5C] text-white shadow-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] rounded-lg">
-            <img src="/logo.png" alt="Click-2-Clean logo" className="h-10 w-10 rounded-lg bg-white p-0.5 object-contain" />
+            <img src="/logo-icon.svg" alt="Click-2-Clean logo" className="h-10 w-10 rounded-lg bg-white p-1 object-contain" />
+
             <div>
               <span className="font-brand text-xl font-extrabold tracking-tight block leading-none">
                 Click-<span className="text-[#FBBF24]">2</span>-Clean
