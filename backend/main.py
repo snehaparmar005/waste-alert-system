@@ -1,246 +1,267 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+import os
+import uuid
+import secrets
+import hashlib
+import hmac
+import numpy as np
+from PIL import Image
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional
-import sqlite3
-import datetime
-import os
-import shutil
+from database import get_db_connection
 
-app = FastAPI(title="CleanGWL Waste Management Platform Engine")
-
+app = FastAPI(title="Click-2-Clean API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create uploads directory and serve images statically
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+MODEL_PATH = os.path.join(BASE_DIR, "waste_classifier.keras")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-DB_FILE = "click2clean.db"
+CLASSES = [
+    {"slug": "biodegradable", "label": "Biodegradable"},
+    {"slug": "hazardous", "label": "Hazardous"},
+    {"slug": "non_biodegradable", "label": "Non-biodegradable"},
+]
+LABEL_MAP = {c["slug"]: c["label"] for c in CLASSES}
+ACTIVE_SESSIONS: dict[str, int] = {}
+_model = None
 
-def get_db():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+def predict_waste(image_path: str) -> dict:
+    global _model
+    if _model is None:
+        import tensorflow as tf
+        _model = tf.keras.models.load_model(MODEL_PATH)
+    img = Image.open(image_path).convert("RGB").resize((224, 224))
+    arr = np.asarray(img, dtype=np.float32)
+    preds = _model.predict(np.expand_dims(arr, axis=0), verbose=0)[0]
+    idx = int(np.argmax(preds))
+    conf = round(float(preds[idx]), 4)
+    return {"slug": CLASSES[idx]["slug"], "label": CLASSES[idx]["label"], "confidence": conf, "needs_retake": conf < 0.65}
 
-def init_db():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT, email TEXT UNIQUE, password TEXT, role TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS reports (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        waste_type TEXT, coordinates TEXT, ward TEXT,
-        remarks TEXT, image_url TEXT, status TEXT, created_at TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS wards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ward TEXT, email TEXT, telegram TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS alerts (
-        id TEXT PRIMARY KEY, reportId INTEGER, ward TEXT,
-        channel TEXT, time TEXT, status TEXT
-    )""")
+def hash_pw(pw: str) -> str:
+    salt = secrets.token_hex(16)
+    return f"{salt}${hashlib.pbkdf2_hmac('sha256', pw.encode(), salt.encode(), 100000).hex()}"
 
-    # Seed default demo accounts if empty
-    if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-        c.executemany("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)", [
-            ("Aarav Sharma", "citizen@test.com", "password123", "citizen"),
-            ("Officer Verma", "officer@nagarnigam.gov.in", "password123", "gov"),
-            ("System Admin", "admin@nagarnigam.gov.in", "password123", "admin")
-        ])
-    if c.execute("SELECT COUNT(*) FROM wards").fetchone()[0] == 0:
-        c.executemany("INSERT INTO wards (ward, email, telegram) VALUES (?, ?, ?)", [
-            ("Ward 12 - Morar", "ward12.nn@gov.in", "@ward12_alert_bot"),
-            ("Ward 14 - City Center", "ward14.nn@gov.in", "@ward14_alert_bot")
-        ])
-    if c.execute("SELECT COUNT(*) FROM reports").fetchone()[0] == 0:
-        c.execute("""INSERT INTO reports (waste_type, coordinates, ward, remarks, image_url, status, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                  ("Plastic", "26.2183, 78.1828", "Ward 12 - Morar", "Near Morar Main Market crossroads.", "", "Pending", str(datetime.date.today())))
-    conn.commit()
-    conn.close()
-
-init_db()
-
-# --- Schemas ---
-class UserLoginPayload(BaseModel):
-    email: str
-    password: str
-
-class UserRegisterPayload(BaseModel):
-    name: str
-    email: str
-    password: str
-    role: Optional[str] = "citizen"
-
-class ProfileUpdateSchema(BaseModel):
-    email: str
-    name: str
-    password: Optional[str] = None
-
-class StatusUpdateSchema(BaseModel):
-    status: str
-
-class RoleUpdateSchema(BaseModel):
-    role: str
-
-class WardCreateSchema(BaseModel):
-    ward: str
-    email: str
-    telegram: str
-
-# --- Routes ---
-@app.get("/")
-def read_root():
-    return {"status": "CleanGWL SQLite Engine Operational"}
-
-@app.post("/api/register")
-def register_user(payload: UserRegisterPayload):
-    conn = get_db()
+def verify_pw(pw: str, stored: str) -> bool:
     try:
-        conn.execute("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
-                     (payload.name, payload.email.strip().lower(), payload.password, payload.role))
+        salt, dig = stored.split("$", 1)
+        return hmac.compare_digest(dig, hashlib.pbkdf2_hmac("sha256", pw.encode(), salt.encode(), 100000).hex())
+    except Exception:
+        return False
+
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    token = authorization.split(" ", 1)[1].strip()
+    uid = ACTIVE_SESSIONS.get(token)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid session.")
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, email, role FROM users WHERE id = %s", (uid,))
+            u = cur.fetchone()
+            if not u:
+                raise HTTPException(status_code=401, detail="User not found.")
+            return u
+    finally:
+        conn.close()
+
+class LoginSchema(BaseModel):
+    email: str
+    password: str
+
+class RegisterSchema(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class PatchReportSchema(BaseModel):
+    status: Optional[str] = None
+    corrected_slug: Optional[str] = None
+
+def seed_users():
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            for name, email, role in [
+                ("Aarav Sharma", "citizen@test.com", "citizen"),
+                ("Officer Verma", "officer@nagarnigam.gov.in", "gov"),
+                ("System Admin", "admin@nagarnigam.gov.in", "admin"),
+            ]:
+                cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+                if not cur.fetchone():
+                    cur.execute("INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, %s)", (name, email, hash_pw("password123"), role))
         conn.commit()
-        return {"success": True}
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Email already registered.")
+        conn.close()
+    except Exception:
+        pass
+
+@app.on_event("startup")
+def on_startup():
+    seed_users()
+
+@app.post("/api/register", status_code=201)
+def register(payload: RegisterSchema):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, 'citizen')", (payload.name, payload.email.lower().strip(), hash_pw(payload.password)))
+        conn.commit()
+        return {"message": "Registered"}
     finally:
         conn.close()
 
 @app.post("/api/login")
-def process_login_auth(payload: UserLoginPayload):
-    conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE email = ?", (payload.email.strip().lower(),)).fetchone()
-    conn.close()
-    if not user or user["password"] != payload.password:
+def login(payload: LoginSchema):
+    seed_users()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM users WHERE email = %s", (payload.email.lower().strip(),))
+            u = cur.fetchone()
+    finally:
+        conn.close()
+    if not u or not verify_pw(payload.password, u["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
+    tok = secrets.token_urlsafe(32)
+    ACTIVE_SESSIONS[tok] = u["id"]
+    return {"token": tok, "user": {"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"]}}
+
+@app.post("/api/logout")
+def logout(authorization: Optional[str] = Header(None)):
+    if authorization and authorization.startswith("Bearer "):
+        ACTIVE_SESSIONS.pop(authorization.split(" ", 1)[1].strip(), None)
+    return {"message": "Logged out"}
+
+def format_row(r: dict) -> dict:
+    slug = r["category_slug"]
     return {
-        "success": True,
-        "name": user["name"],
-        "email": user["email"],
-        "role": user["role"],
-        "token": f"session-key-{user['role']}"
+        "id": r["id"],
+        "user_id": r["user_id"],
+        "user_name": r.get("user_name"),
+        "image_url": r["image_path"],
+        "category": {"slug": slug, "label": LABEL_MAP.get(slug, slug)},
+        "corrected_slug": r.get("corrected_slug"),
+        "confidence": float(r["confidence"]),
+        "needs_retake": bool(r["needs_retake"]),
+        "latitude": float(r["latitude"]),
+        "longitude": float(r["longitude"]),
+        "ward": r.get("ward") or "Ward 12 - Morar",
+        "remarks": r.get("remarks") or "",
+        "status": r["status"],
     }
 
-@app.patch("/api/profile")
-def update_profile(payload: ProfileUpdateSchema):
-    conn = get_db()
-    if payload.password:
-        conn.execute("UPDATE users SET name = ?, password = ? WHERE email = ?",
-                     (payload.name, payload.password, payload.email))
-    else:
-        conn.execute("UPDATE users SET name = ? WHERE email = ?", (payload.name, payload.email))
-    conn.commit()
-    conn.close()
-    return {"success": True, "message": "Profile updated successfully."}
+@app.post("/api/reports", status_code=201)
+async def create_report(
+    file: UploadFile = File(...),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    remarks: str = Form(""),
+    ward: str = Form("Ward 12 - Morar"),
+    user: dict = Depends(get_current_user),
+):
+    raw = await file.read()
+    fname = f"{uuid.uuid4().hex}.jpg"
+    fpath = os.path.join(UPLOAD_DIR, fname)
+    with open(fpath, "wb") as f:
+        f.write(raw)
 
-@app.get("/api/users")
-def get_all_users():
-    conn = get_db()
-    rows = conn.execute("SELECT id, name, email, role FROM users").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-@app.patch("/api/users/{email}")
-def update_user_role(email: str, payload: RoleUpdateSchema):
-    conn = get_db()
-    conn.execute("UPDATE users SET role = ? WHERE email = ?", (payload.role, email))
-    conn.commit()
-    conn.close()
-    return {"success": True}
-
-@app.delete("/api/users/{email}")
-def delete_user(email: str):
-    conn = get_db()
-    conn.execute("DELETE FROM users WHERE email = ?", (email,))
-    conn.commit()
-    conn.close()
-    return {"success": True}
+    pred = predict_waste(fpath)
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO reports (user_id, image_path, category_slug, confidence, needs_retake, latitude, longitude, ward, remarks, status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'reported')",
+                (user["id"], f"/uploads/{fname}", pred["slug"], pred["confidence"], pred["needs_retake"], latitude, longitude, ward, remarks),
+            )
+            rid = cur.lastrowid
+            cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (rid,))
+            row = cur.fetchone()
+        conn.commit()
+        return format_row(row)
+    finally:
+        conn.close()
 
 @app.get("/api/reports")
-def get_all_reports():
-    conn = get_db()
-    rows = conn.execute("SELECT * FROM reports ORDER BY id DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+def get_reports(user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            if user["role"] == "citizen":
+                cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.user_id = %s ORDER BY r.id DESC", (user["id"],))
+            else:
+                cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id ORDER BY r.id DESC")
+            return [format_row(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
 
-@app.post("/api/reports")
-async def create_new_report(
-    waste_type: str = Form(...),
-    coordinates: str = Form(...),
-    ward: str = Form("Ward 12 - Morar"),
-    remarks: str = Form(""),
-    photo: Optional[UploadFile] = File(None)
-):
-    image_url = ""
-    if photo and photo.filename:
-        safe_name = f"{int(datetime.datetime.now().timestamp())}_{photo.filename}"
-        file_path = os.path.join("uploads", safe_name)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(photo.file, buffer)
-        image_url = f"/uploads/{safe_name}"
-
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""INSERT INTO reports (waste_type, coordinates, ward, remarks, image_url, status, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (waste_type, coordinates, ward, remarks, image_url, "Pending", str(datetime.date.today())))
-    new_id = cur.lastrowid
-
-    cur.execute("""INSERT INTO alerts (id, reportId, ward, channel, time, status)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (f"AL-{500 + new_id}", new_id, ward, "Telegram & Email",
-                 datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p"), "Delivered"))
-    conn.commit()
-    conn.close()
-    return {"success": True, "data": {"id": new_id, "image_url": image_url}}
+@app.get("/api/reports/{report_id}")
+def get_report(report_id: int, user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
+            row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        return format_row(row)
+    finally:
+        conn.close()
 
 @app.patch("/api/reports/{report_id}")
-def update_report_status(report_id: int, payload: StatusUpdateSchema):
-    conn = get_db()
-    conn.execute("UPDATE reports SET status = ? WHERE id = ?", (payload.status, report_id))
-    conn.commit()
-    conn.close()
-    return {"success": True}
+def patch_report(report_id: int, payload: PatchReportSchema, user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            if payload.corrected_slug:
+                cur.execute("UPDATE reports SET corrected_slug = %s WHERE id = %s", (payload.corrected_slug, report_id))
+            if payload.status:
+                cur.execute("UPDATE reports SET status = %s WHERE id = %s", (payload.status, report_id))
+            cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
+            row = cur.fetchone()
+        conn.commit()
+        return format_row(row)
+    finally:
+        conn.close()
 
 @app.delete("/api/reports/{report_id}")
-def delete_report(report_id: int):
-    conn = get_db()
-    conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
-    conn.commit()
-    conn.close()
-    return {"success": True}
+def del_report(report_id: int, user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM reports WHERE id = %s", (report_id,))
+        conn.commit()
+        return {"deleted": True}
+    finally:
+        conn.close()
 
-@app.get("/api/wards")
-def get_wards():
-    conn = get_db()
-    rows = conn.execute("SELECT * FROM wards").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+@app.get("/api/admin/users")
+def list_users(user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, email, role FROM users ORDER BY id ASC")
+            return cur.fetchall()
+    finally:
+        conn.close()
 
-@app.post("/api/wards")
-def add_ward(payload: WardCreateSchema):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("INSERT INTO wards (ward, email, telegram) VALUES (?, ?, ?)",
-                (payload.ward, payload.email, payload.telegram))
-    new_id = cur.lastrowid
-    conn.commit()
-    conn.close()
-    return {"success": True, "data": {"id": new_id, **payload.dict()}}
-
-@app.get("/api/alerts")
-def get_alerts():
-    conn = get_db()
-    rows = conn.execute("SELECT * FROM alerts ORDER BY reportId DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+@app.get("/api/admin/wards")
+def list_wards(user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM wards ORDER BY id ASC")
+            return cur.fetchall()
+    finally:
+        conn.close()

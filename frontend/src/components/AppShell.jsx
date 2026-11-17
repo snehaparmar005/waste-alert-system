@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { apiRequest, clearSession } from "../api/client";
 
 export default function AppShell({ user, onLogout, children }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
+  const role = user?.role;
 
   const handleLogout = async () => {
     try {
@@ -17,148 +19,165 @@ export default function AppShell({ user, onLogout, children }) {
     navigate("/login");
   };
 
-  const role = user?.role;
+  const navItemsByRole = {
+    citizen: [
+      { to: "/report", label: "Report Waste", icon: "📷" },
+      { to: "/my-reports", label: "My Reports", icon: "📋" },
+      { to: "/profile", label: "Settings & Profile", icon: "⚙️" },
+    ],
+    gov: [
+      { to: "/gov/dashboard", label: "Dashboard", icon: "🏠" },
+      { to: "/gov/reports", label: "Manage Complaints", icon: "📋" },
+    ],
+    admin: [
+      { to: "/admin/dashboard", label: "Dashboard", icon: "🏠" },
+      { to: "/admin/reports", label: "Manage Complaints", icon: "📋" },
+      { to: "/admin/users", label: "Staff Management", icon: "👥" },
+      { to: "/admin/authorities", label: "Wards & Map", icon: "📍" },
+      { to: "/admin/alerts", label: "Notifications", icon: "🔔" },
+    ],
+  };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-[#F7FAF8] text-[#172B27]">
-      {/* Header & Navigation */}
-      <header className="bg-[#0F4C5C] text-white shadow-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] rounded-lg">
-            <img src="/logo-icon.svg" alt="Click-2-Clean logo" className="h-10 w-10 rounded-lg bg-white p-1 object-contain" />
-
+  // Public visitors (not logged in) keep a clean top navigation bar
+  if (!role) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#F4F7F6] text-[#172B27]">
+        <header className="bg-[#0B4650] text-white px-6 py-3.5 shadow-sm flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-3">
+            <img src="/logo-icon.svg" alt="Click-2-Clean" className="h-10 w-10 rounded-xl bg-white p-1" />
             <div>
-              <span className="font-brand text-xl font-extrabold tracking-tight block leading-none">
-                Click-<span className="text-[#FBBF24]">2</span>-Clean
+              <span className="font-brand text-xl font-extrabold block leading-none">
+                Click-<span className="text-[#F8C31C]">2</span>-Clean
               </span>
-              <span className="text-[11px] uppercase tracking-widest text-[#EAF5EE] font-medium">
+              <span className="text-[11px] uppercase tracking-widest text-emerald-200">
                 Snap. Sort. Alert.
               </span>
             </div>
           </Link>
+          <div className="flex items-center gap-4 text-sm font-medium">
+            <Link to="/" className="hover:text-[#F8C31C]">Home</Link>
+            <Link to="/login" className="hover:text-[#F8C31C]">Login</Link>
+            <Link to="/register" className="bg-[#159B43] hover:bg-[#118037] text-white px-4 py-2 rounded-lg font-semibold">
+              Register
+            </Link>
+          </div>
+        </header>
+        <main className="flex-grow">{children}</main>
+      </div>
+    );
+  }
 
-          {/* Desktop Navigation */}
-          <nav aria-label="Primary Navigation" className="hidden md:flex items-center gap-6 text-sm font-medium">
-            {!role && (
-              <>
-                <Link to="/" className="hover:text-[#FBBF24] transition">Home</Link>
-                <Link to="/login" className="hover:text-[#FBBF24] transition">Login</Link>
-                <Link to="/register" className="bg-[#2E9E5B] hover:bg-[#25834b] text-white px-4 py-2 rounded-lg font-semibold transition">
-                  Register
-                </Link>
-              </>
-            )}
+  const links = navItemsByRole[role] || [];
 
-            {role === "citizen" && (
-              <>
-                <Link to="/report" className="hover:text-[#FBBF24] transition">Report Waste</Link>
-                <Link to="/my-reports" className="hover:text-[#FBBF24] transition">My Reports</Link>
-                <Link to="/profile" className="hover:text-[#FBBF24] transition">Profile</Link>
-              </>
-            )}
+  return (
+    <div className="min-h-screen flex bg-[#F4F7F6] text-[#172B27]">
+      {/* Left Deep Teal Sidebar */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#0B4650] text-white flex flex-col justify-between transition-transform duration-200 lg:static lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div>
+          {/* Brand Logo Header */}
+          <div className="p-5 flex items-center gap-3 border-b border-white/10">
+            <img src="/logo-icon.svg" alt="Click-2-Clean" className="h-11 w-11 rounded-xl bg-white p-1 object-contain" />
+            <div>
+              <span className="font-brand text-lg font-extrabold tracking-tight block leading-tight">
+                Click-<span className="text-[#F8C31C]">2</span>-Clean
+              </span>
+              <span className="text-[11px] text-emerald-200 tracking-wide">Snap. Sort. Alert.</span>
+            </div>
+          </div>
 
-            {role === "gov" && (
-              <>
-                <Link to="/gov/dashboard" className="hover:text-[#FBBF24] transition">Dashboard</Link>
-                <Link to="/gov/reports" className="hover:text-[#FBBF24] transition">Area Reports</Link>
-              </>
-            )}
-
-            {role === "admin" && (
-              <>
-                <Link to="/admin/dashboard" className="hover:text-[#FBBF24] transition">Dashboard</Link>
-                <Link to="/admin/reports" className="hover:text-[#FBBF24] transition">Reports</Link>
-                <Link to="/admin/users" className="hover:text-[#FBBF24] transition">Staff & Users</Link>
-                <Link to="/admin/authorities" className="hover:text-[#FBBF24] transition">Wards</Link>
-                <Link to="/admin/alerts" className="hover:text-[#FBBF24] transition">Alerts</Link>
-              </>
-            )}
-
-            {role && (
-              <div className="flex items-center gap-3 pl-4 border-l border-white/20">
-                <span className="text-xs bg-white/10 px-2.5 py-1 rounded-full">
-                  {user.name} ({role})
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="bg-red-500 hover:bg-red-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold min-h-[36px]"
-                >
-                  Logout
-                </button>
-              </div>
-            )}
+          {/* Sidebar Navigation Links */}
+          <nav className="p-4 space-y-1.5 text-sm font-medium">
+            {links.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                    isActive
+                      ? "bg-[#159B43] text-white font-semibold shadow-sm"
+                      : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`
+                }
+              >
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+              </NavLink>
+            ))}
           </nav>
+        </div>
 
-          {/* Mobile Menu Button */}
+        {/* Bottom Sidebar Slogan & Logout */}
+        <div className="p-4 border-t border-white/10 space-y-3">
+          <div className="bg-white/5 rounded-xl p-3 text-center">
+            <p className="text-xs font-semibold text-emerald-200">Cleaner City</p>
+            <p className="text-xs text-white/70">Greener Tomorrow</p>
+          </div>
           <button
-            type="button"
-            aria-label="Toggle Menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="md:hidden p-2 rounded-lg hover:bg-white/10 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            onClick={handleLogout}
+            className="w-full bg-red-500/90 hover:bg-red-600 text-white py-2.5 rounded-xl text-xs font-semibold transition"
           >
-            ☰
+            Logout ({user.name})
           </button>
         </div>
+      </aside>
 
-        {/* Mobile Menu Dropdown */}
-        {menuOpen && (
-          <nav className="md:hidden px-4 pb-4 space-y-2 text-sm border-t border-white/15 pt-3">
-            {!role && (
-              <>
-                <Link to="/" onClick={() => setMenuOpen(false)} className="block py-2">Home</Link>
-                <Link to="/login" onClick={() => setMenuOpen(false)} className="block py-2">Login</Link>
-                <Link to="/register" onClick={() => setMenuOpen(false)} className="block py-2 text-[#FBBF24] font-semibold">Register</Link>
-              </>
-            )}
-            {role === "citizen" && (
-              <>
-                <Link to="/report" onClick={() => setMenuOpen(false)} className="block py-2">Report Waste</Link>
-                <Link to="/my-reports" onClick={() => setMenuOpen(false)} className="block py-2">My Reports</Link>
-                <Link to="/profile" onClick={() => setMenuOpen(false)} className="block py-2">Profile</Link>
-              </>
-            )}
-            {role === "gov" && (
-              <>
-                <Link to="/gov/dashboard" onClick={() => setMenuOpen(false)} className="block py-2">Dashboard</Link>
-                <Link to="/gov/reports" onClick={() => setMenuOpen(false)} className="block py-2">Area Reports</Link>
-              </>
-            )}
-            {role === "admin" && (
-              <>
-                <Link to="/admin/dashboard" onClick={() => setMenuOpen(false)} className="block py-2">Dashboard</Link>
-                <Link to="/admin/reports" onClick={() => setMenuOpen(false)} className="block py-2">Reports</Link>
-                <Link to="/admin/users" onClick={() => setMenuOpen(false)} className="block py-2">Users</Link>
-                <Link to="/admin/authorities" onClick={() => setMenuOpen(false)} className="block py-2">Wards</Link>
-                <Link to="/admin/alerts" onClick={() => setMenuOpen(false)} className="block py-2">Alerts</Link>
-              </>
-            )}
-            {role && (
-              <button onClick={handleLogout} className="w-full text-left py-2 text-red-300 font-semibold">
-                Logout ({user.name})
-              </button>
-            )}
-          </nav>
-        )}
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-grow">{children}</main>
-
-      {/* Shared Footer */}
-      <footer className="bg-[#0F4C5C] text-white/80 text-xs mt-12">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div>
-            <p className="font-brand font-bold text-white text-sm">Click-2-Clean • Snap. Sort. Alert.</p>
-            <p className="mt-0.5 text-white/70">Powered by Smart City Waste Intelligence</p>
+      {/* Right Main Workspace */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top White Header Bar */}
+        <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-30">
+          <div className="flex items-center gap-3 flex-1 max-w-md">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden p-2 rounded-lg border text-gray-600"
+              aria-label="Toggle Sidebar"
+            >
+              ☰
+            </button>
+            <div className="relative w-full">
+              <span className="absolute left-3 top-2.5 text-gray-400 text-sm">🔍</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search complaints, locations..."
+                className="w-full bg-[#F4F7F6] border border-gray-200 rounded-full pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-[#159B43]"
+              />
+            </div>
           </div>
-          <div className="flex flex-wrap gap-5">
-            <Link to="/" className="hover:text-white">Home</Link>
-            <Link to="/report" className="hover:text-white">Report Waste</Link>
-            <Link to="/login" className="hover:text-white">Staff Portal</Link>
+
+          <div className="flex items-center gap-4">
+            <Link
+              to={role === "admin" ? "/admin/alerts" : role === "gov" ? "/gov/reports" : "/my-reports"}
+              className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-full"
+              title="Notifications"
+            >
+              🔔
+              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500"></span>
+            </Link>
+
+            <div className="flex items-center gap-2.5 pl-2 border-l border-gray-200">
+              <div className="h-9 w-9 rounded-full bg-[#0B4650] text-white font-bold text-sm flex items-center justify-center uppercase">
+                {(user.name || "U")}
+              </div>
+              <div className="hidden sm:block leading-tight">
+                <p className="text-sm font-bold text-gray-800">{user.name}</p>
+                <p className="text-[11px] text-gray-500 capitalize">
+                  {role === "gov" ? "Nagar Nigam" : role}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      </footer>
+        </header>
+
+        {/* Page Body */}
+        <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto">{children}</main>
+      </div>
     </div>
   );
 }

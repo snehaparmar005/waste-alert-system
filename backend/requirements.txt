@@ -1,8 +1,10 @@
 fastapi
-uvicorn
-python-multipart
+uvicorn[standard]
 pymysql
+cryptography
 python-dotenv
-tensorflow
+python-multipart
+pillow
 numpy
-Pillow
+tensorflow-cpu
+requests

@@ -33,7 +33,7 @@ def is_model_ready() -> bool:
 def predict_image(image_path: str) -> dict:
     model = get_model()
     img = Image.open(image_path).convert("RGB").resize((224, 224))
-    arr = np.asarray(img, dtype=np.float32) / 255.0
+    arr = np.asarray(img, dtype=np.float32)
     batch = np.expand_dims(arr, axis=0)
 
     preds = model.predict(batch, verbose=0)

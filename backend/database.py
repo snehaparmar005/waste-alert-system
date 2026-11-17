@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_db_connection():
+    use_ssl = os.getenv("DB_SSL", "false").lower() == "true"
+    ssl_config = {"ssl": {}} if use_ssl else {}
+
     return pymysql.connect(
         host=os.getenv("DB_HOST", "127.0.0.1"),
         port=int(os.getenv("DB_PORT", 3306)),
@@ -14,4 +17,5 @@ def get_db_connection():
         database=os.getenv("DB_NAME", "waste_db"),
         cursorclass=DictCursor,
         autocommit=False,
+        **ssl_config,
     )
