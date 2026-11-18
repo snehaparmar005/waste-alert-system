@@ -1,6 +1,6 @@
-export const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL || "https://click-2-clean-ap.onrender.com"
-).replace(/\/$/, "");
+export const API_BASE = import.meta.env.DEV
+  ? (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "")
+  : "";
 
 export function getSession() {
   try {
