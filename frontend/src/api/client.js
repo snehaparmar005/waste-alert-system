@@ -1,7 +1,4 @@
-export const API_BASE = import.meta.env.DEV
-  ? (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "")
-  : "";
-
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || "https://onrender.com").replace(/\/$/, "");
 export function getSession() {
   try {
     const raw = localStorage.getItem("c2c_session");
