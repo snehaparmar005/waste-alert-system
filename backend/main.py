@@ -1,5 +1,4 @@
 import os
-import gc
 import uuid
 import secrets
 import hashlib
@@ -41,19 +40,13 @@ def predict_waste(image_path: str) -> dict:
     global _model
     if _model is None:
         import tensorflow as tf
-        _model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+        _model = tf.keras.models.load_model(MODEL_PATH)
     img = Image.open(image_path).convert("RGB").resize((224, 224))
     arr = np.asarray(img, dtype=np.float32)
     preds = _model.predict(np.expand_dims(arr, axis=0), verbose=0)[0]
     idx = int(np.argmax(preds))
     conf = round(float(preds[idx]), 4)
-    gc.collect()
-    return {
-        "slug": CLASSES[idx]["slug"],
-        "label": CLASSES[idx]["label"],
-        "confidence": conf,
-        "needs_retake": conf < 0.65,
-    }
+    return {"slug": CLASSES[idx]["slug"], "label": CLASSES[idx]["label"], "confidence": conf, "needs_retake": conf < 0.65}
 
 def hash_pw(pw: str) -> str:
     salt = secrets.token_hex(16)
@@ -69,7 +62,7 @@ def verify_pw(pw: str, stored: str) -> bool:
 def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authentication required.")
-    token = authorization.split(" ", 1).strip()
+    token = authorization.split(" ", 1)[1].strip()
     uid = ACTIVE_SESSIONS.get(token)
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid session.")
@@ -97,6 +90,10 @@ class PatchReportSchema(BaseModel):
     status: Optional[str] = None
     corrected_slug: Optional[str] = None
 
+class ProfileUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    password: Optional[str] = None
+
 def seed_users():
     try:
         conn = get_db_connection()
@@ -117,21 +114,6 @@ def seed_users():
 @app.on_event("startup")
 def on_startup():
     seed_users()
-
-@app.get("/")
-def root_health():
-    return {"status": "ok", "service": "Click-2-Clean API"}
-
-@app.get("/api/profile")
-def get_profile(user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) AS total FROM reports WHERE user_id = %s", (user["id"],))
-            row = cur.fetchone()
-        return {**user, "report_count": row["total"] if row else 0}
-    finally:
-        conn.close()
 
 @app.post("/api/register", status_code=201)
 def register(payload: RegisterSchema):
@@ -163,8 +145,46 @@ def login(payload: LoginSchema):
 @app.post("/api/logout")
 def logout(authorization: Optional[str] = Header(None)):
     if authorization and authorization.startswith("Bearer "):
-        ACTIVE_SESSIONS.pop(authorization.split(" ", 1).strip(), None)
+        ACTIVE_SESSIONS.pop(authorization.split(" ", 1)[1].strip(), None)
     return {"message": "Logged out"}
+
+@app.get("/api/profile")
+def get_profile(user: dict = Depends(get_current_user)):
+    return user
+
+@app.patch("/api/profile")
+def update_profile(payload: ProfileUpdateSchema, user: dict = Depends(get_current_user)):
+    updates = []
+    values = []
+    updated_user = dict(user)
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Name cannot be empty.")
+        updates.append("name = %s")
+        values.append(name)
+        updated_user["name"] = name
+
+    if payload.password:
+        if len(payload.password) < 6:
+            raise HTTPException(status_code=422, detail="Password must be at least 6 characters.")
+        updates.append("password_hash = %s")
+        values.append(hash_pw(payload.password))
+
+    if updates:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE users SET {', '.join(updates)} WHERE id = %s",
+                    (*values, user["id"]),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+    return updated_user
 
 def format_row(r: dict) -> dict:
     slug = r["category_slug"]
@@ -270,3 +290,20 @@ def del_report(report_id: int, user: dict = Depends(get_current_user)):
 
 @app.get("/api/admin/users")
 def list_users(user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, email, role FROM users ORDER BY id ASC")
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+@app.get("/api/admin/wards")
+def list_wards(user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM wards ORDER BY id ASC")
+            return cur.fetchall()
+    finally:
+        conn.close()
