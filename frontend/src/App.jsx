@@ -1,60 +1,108 @@
 import { useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSession } from "./api/client";
-
 import AppShell from "./components/AppShell";
 import HomePage from "./components/HomePage";
 import LoginCard from "./components/LoginCard";
 import RegisterCard from "./components/RegisterCard";
-
-// Citizen
 import ReportWaste from "./components/ReportWaste";
-import MyReportsTimeline from "./components/MyReportsTimeline";
-import UserProfile from "./components/UserProfile";
-
-// Government
+import MyReports from "./components/MyReports";
+import ProfileSettings from "./components/ProfileSettings";
 import GovDashboard from "./components/gov/GovDashboard";
 import GovReports from "./components/gov/GovReports";
-import GovReportDetail from "./components/gov/GovReportDetail";
-
-// Admin
 import AdminDashboard from "./components/admin/AdminDashboard";
 import AdminReports from "./components/admin/AdminReports";
 import AdminUsers from "./components/admin/AdminUsers";
 import AdminAuthorities from "./components/admin/AdminAuthorities";
 import AdminAlerts from "./components/admin/AdminAlerts";
+import WorkerDashboard from "./components/worker/WorkerDashboard";
+
+function getHomePath(role) {
+  if (role === "admin") return "/admin/dashboard";
+  if (role === "gov") return "/gov/dashboard";
+  if (role === "worker") return "/worker/dashboard";
+  return "/report";
+}
 
 export default function App() {
-  const [session, setSession] = useState(getSession());
-  const role = session?.user?.role;
+  const [session, setSession] = useState(() => getSession());
+  const user = session?.user || null;
+
+  const handleAuthSuccess = (newSession) => setSession(newSession);
+  const handleLogout = () => setSession(null);
 
   return (
-    <Router>
-      <AppShell user={session?.user} onLogout={() => setSession(null)}>
+    <BrowserRouter>
+      <AppShell user={user} onLogout={handleLogout}>
         <Routes>
-          {/* Public */}
-          <Route path="/" element={<HomePage user={session?.user} />} />
-          <Route path="/register" element={<RegisterCard />} />
-          <Route path="/login" element={<LoginCard onLoginSuccess={setSession} />} />
+          <Route
+            path="/"
+            element={user ? <Navigate to={getHomePath(user.role)} replace /> : <HomePage />}
+          />
+          <Route
+            path="/login"
+            element={user ? <Navigate to={getHomePath(user.role)} replace /> : <LoginCard onAuthSuccess={handleAuthSuccess} />}
+          />
+          <Route
+            path="/register"
+            element={user ? <Navigate to={getHomePath(user.role)} replace /> : <RegisterCard onAuthSuccess={handleAuthSuccess} />}
+          />
 
-          {/* Citizen */}
-          <Route path="/report" element={role === "citizen" ? <ReportWaste /> : <Navigate to="/login" />} />
-          <Route path="/my-reports" element={role === "citizen" ? <MyReportsTimeline /> : <Navigate to="/login" />} />
-          <Route path="/profile" element={role === "citizen" ? <UserProfile onProfileUpdate={(u) => setSession({ ...session, user: u })} /> : <Navigate to="/login" />} />
+          {/* Citizen Routes */}
+          <Route
+            path="/report"
+            element={user?.role === "citizen" ? <ReportWaste /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/my-reports"
+            element={user?.role === "citizen" ? <MyReports /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/profile"
+            element={user ? <ProfileSettings /> : <Navigate to="/login" replace />}
+          />
 
-          {/* Government */}
-          <Route path="/gov/dashboard" element={role === "gov" ? <GovDashboard /> : <Navigate to="/login" />} />
-          <Route path="/gov/reports" element={role === "gov" ? <GovReports /> : <Navigate to="/login" />} />
-          <Route path="/gov/report/:id" element={role === "gov" ? <GovReportDetail /> : <Navigate to="/login" />} />
+          {/* Worker Route */}
+          <Route
+            path="/worker/dashboard"
+            element={user?.role === "worker" ? <WorkerDashboard /> : <Navigate to="/login" replace />}
+          />
 
-          {/* Admin */}
-          <Route path="/admin/dashboard" element={role === "admin" ? <AdminDashboard /> : <Navigate to="/login" />} />
-          <Route path="/admin/reports" element={role === "admin" ? <AdminReports /> : <Navigate to="/login" />} />
-          <Route path="/admin/users" element={role === "admin" ? <AdminUsers /> : <Navigate to="/login" />} />
-          <Route path="/admin/authorities" element={role === "admin" ? <AdminAuthorities /> : <Navigate to="/login" />} />
-          <Route path="/admin/alerts" element={role === "admin" ? <AdminAlerts /> : <Navigate to="/login" />} />
+          {/* Nagar Nigam Routes */}
+          <Route
+            path="/gov/dashboard"
+            element={user?.role === "gov" ? <GovDashboard /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/gov/reports"
+            element={user?.role === "gov" ? <GovReports /> : <Navigate to="/login" replace />}
+          />
+
+          {/* Admin Routes */}
+          <Route
+            path="/admin/dashboard"
+            element={user?.role === "admin" ? <AdminDashboard /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/admin/reports"
+            element={user?.role === "admin" ? <AdminReports /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/admin/users"
+            element={user?.role === "admin" ? <AdminUsers /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/admin/authorities"
+            element={user?.role === "admin" ? <AdminAuthorities /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/admin/alerts"
+            element={user?.role === "admin" ? <AdminAlerts /> : <Navigate to="/login" replace />}
+          />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppShell>
-    </Router>
+    </BrowserRouter>
   );
 }

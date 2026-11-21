@@ -1,5 +1,7 @@
 import os
+import gc
 import uuid
+import base64
 import secrets
 import hashlib
 import hmac
@@ -33,20 +35,40 @@ CLASSES = [
     {"slug": "non_biodegradable", "label": "Non-biodegradable"},
 ]
 LABEL_MAP = {c["slug"]: c["label"] for c in CLASSES}
-ACTIVE_SESSIONS: dict[str, int] = {}
+SECRET_KEY = os.getenv("SECRET_KEY", "click2clean-super-secret-key-2026")
 _model = None
+
+def create_token(user_id: int) -> str:
+    payload = str(user_id)
+    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
+
+def verify_token(token: str) -> Optional[int]:
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
+        uid_str, sig = decoded.split(":", 1)
+        expected = hmac.new(SECRET_KEY.encode(), uid_str.encode(), hashlib.sha256).hexdigest()
+        return int(uid_str) if hmac.compare_digest(sig, expected) else None
+    except Exception:
+        return None
 
 def predict_waste(image_path: str) -> dict:
     global _model
     if _model is None:
         import tensorflow as tf
-        _model = tf.keras.models.load_model(MODEL_PATH)
+        _model = tf.keras.models.load_model(MODEL_PATH, compile=False)
     img = Image.open(image_path).convert("RGB").resize((224, 224))
     arr = np.asarray(img, dtype=np.float32)
     preds = _model.predict(np.expand_dims(arr, axis=0), verbose=0)[0]
     idx = int(np.argmax(preds))
     conf = round(float(preds[idx]), 4)
-    return {"slug": CLASSES[idx]["slug"], "label": CLASSES[idx]["label"], "confidence": conf, "needs_retake": conf < 0.65}
+    gc.collect()
+    return {
+        "slug": CLASSES[idx]["slug"],
+        "label": CLASSES[idx]["label"],
+        "confidence": conf,
+        "needs_retake": conf < 0.65,
+    }
 
 def hash_pw(pw: str) -> str:
     salt = secrets.token_hex(16)
@@ -63,7 +85,7 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authentication required.")
     token = authorization.split(" ", 1)[1].strip()
-    uid = ACTIVE_SESSIONS.get(token)
+    uid = verify_token(token)
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid session.")
     conn = get_db_connection()
@@ -90,10 +112,6 @@ class PatchReportSchema(BaseModel):
     status: Optional[str] = None
     corrected_slug: Optional[str] = None
 
-class ProfileUpdateSchema(BaseModel):
-    name: Optional[str] = None
-    password: Optional[str] = None
-
 def seed_users():
     try:
         conn = get_db_connection()
@@ -101,6 +119,7 @@ def seed_users():
             for name, email, role in [
                 ("Aarav Sharma", "citizen@test.com", "citizen"),
                 ("Officer Verma", "officer@nagarnigam.gov.in", "gov"),
+                ("Ramesh Patel", "worker@nagarnigam.gov.in", "worker"),
                 ("System Admin", "admin@nagarnigam.gov.in", "admin"),
             ]:
                 cur.execute("SELECT id FROM users WHERE email = %s", (email,))
@@ -114,6 +133,21 @@ def seed_users():
 @app.on_event("startup")
 def on_startup():
     seed_users()
+
+@app.get("/")
+def root_health():
+    return {"status": "ok", "service": "Click-2-Clean API"}
+
+@app.get("/api/profile")
+def get_profile(user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS total FROM reports WHERE user_id = %s", (user["id"],))
+            row = cur.fetchone()
+        return {**user, "report_count": row["total"] if row else 0}
+    finally:
+        conn.close()
 
 @app.post("/api/register", status_code=201)
 def register(payload: RegisterSchema):
@@ -138,53 +172,12 @@ def login(payload: LoginSchema):
         conn.close()
     if not u or not verify_pw(payload.password, u["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-    tok = secrets.token_urlsafe(32)
-    ACTIVE_SESSIONS[tok] = u["id"]
+    tok = create_token(u["id"])
     return {"token": tok, "user": {"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"]}}
 
 @app.post("/api/logout")
-def logout(authorization: Optional[str] = Header(None)):
-    if authorization and authorization.startswith("Bearer "):
-        ACTIVE_SESSIONS.pop(authorization.split(" ", 1)[1].strip(), None)
+def logout():
     return {"message": "Logged out"}
-
-@app.get("/api/profile")
-def get_profile(user: dict = Depends(get_current_user)):
-    return user
-
-@app.patch("/api/profile")
-def update_profile(payload: ProfileUpdateSchema, user: dict = Depends(get_current_user)):
-    updates = []
-    values = []
-    updated_user = dict(user)
-
-    if payload.name is not None:
-        name = payload.name.strip()
-        if not name:
-            raise HTTPException(status_code=422, detail="Name cannot be empty.")
-        updates.append("name = %s")
-        values.append(name)
-        updated_user["name"] = name
-
-    if payload.password:
-        if len(payload.password) < 6:
-            raise HTTPException(status_code=422, detail="Password must be at least 6 characters.")
-        updates.append("password_hash = %s")
-        values.append(hash_pw(payload.password))
-
-    if updates:
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"UPDATE users SET {', '.join(updates)} WHERE id = %s",
-                    (*values, user["id"]),
-                )
-            conn.commit()
-        finally:
-            conn.close()
-
-    return updated_user
 
 def format_row(r: dict) -> dict:
     slug = r["category_slug"]
@@ -273,37 +266,3 @@ def patch_report(report_id: int, payload: PatchReportSchema, user: dict = Depend
             cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
             row = cur.fetchone()
         conn.commit()
-        return format_row(row)
-    finally:
-        conn.close()
-
-@app.delete("/api/reports/{report_id}")
-def del_report(report_id: int, user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM reports WHERE id = %s", (report_id,))
-        conn.commit()
-        return {"deleted": True}
-    finally:
-        conn.close()
-
-@app.get("/api/admin/users")
-def list_users(user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, name, email, role FROM users ORDER BY id ASC")
-            return cur.fetchall()
-    finally:
-        conn.close()
-
-@app.get("/api/admin/wards")
-def list_wards(user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM wards ORDER BY id ASC")
-            return cur.fetchall()
-    finally:
-        conn.close()

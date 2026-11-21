@@ -118,7 +118,11 @@ export default function AppShell({ user, onLogout, children }) {
       { to: "/admin/authorities", label: "Wards & Map", icon: "pin" },
       { to: "/admin/alerts", label: "Notifications", icon: "bell" },
     ],
-  };
+
+  worker: [
+  { to: "/worker/dashboard", label: "Assigned Tasks", icon: "pin" },
+],
+  }
 
   if (!role) {
     return (
