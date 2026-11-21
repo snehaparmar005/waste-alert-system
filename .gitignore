@@ -1,0 +1,16 @@
+node_modules
+dist
+.env
+.venv
+__pycache__
+backend/uploads
+*.log
+.env
+**/.env
+venv/
+venv312/
+**/venv/
+**/venv312/
+_pycache_/
+*.pyc
+**/received_photos/

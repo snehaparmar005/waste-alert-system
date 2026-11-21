@@ -1,0 +1,339 @@
+import { Link } from "react-router-dom";
+import { lazy, useEffect, useRef, useState } from "react";
+import { useGSAP } from "@gsap/react";
+import { gsap, ScrollTrigger, startSmoothScroll, scrollToHash, getLenis, prefersReducedMotion, hero as heroState } from "@/lib/motion";
+import { CanvasSlot } from "@/components/three/CanvasSlot";
+import { SortGame } from "@/components/landing/SortGame";
+import { SpotCard } from "@/components/landing/SpotCard";
+import { Dashboard } from "@/components/landing/Dashboard";
+import { Phone } from "@/components/landing/Phone";
+import { BottleDoodle } from "@/components/landing/Doodles";
+import { Camera, Cpu, MapPin, BellRing, Menu, X, Leaf, Recycle, AlertTriangle, Map, ListChecks, BarChart3, CheckCircle2 } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import logo from "@/assets/logo.png";
+import * as C from "@/content/landing";
+const HeroScene = lazy(() => import("@/components/three/HeroScene"));
+const btn = "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-6 py-3 font-semibold transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+const primary = `${btn} bg-primary text-primary-foreground shadow-soft hover:bg-primary-hover`;
+const outline = `${btn} border-2 border-ink bg-card text-ink hover:bg-tint`;
+function Reveal({ children, className }) {
+  return <div className={`reveal ${className ?? ""}`}>{children}</div>;
+}
+function Heading({ eyebrow, title, note, className }) {
+  return <Reveal className={`mx-auto max-w-2xl text-center ${className ?? "mb-12"}`}>
+      <p className="text-sm font-bold uppercase tracking-widest text-primary">{eyebrow}</p>
+      <h2 className="mt-2 text-4xl font-extrabold md:text-5xl">{title}</h2>
+      {note && <p className="mt-2 inline-block -rotate-3 font-hand text-2xl font-semibold text-bio-ink" aria-hidden>{note}</p>}
+    </Reveal>;
+}
+function Logo() {
+  return <a href="#top" data-nav className="flex min-h-11 items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <img src={logo} alt="Click-2-Clean logo" width={36} height={36} className="h-9 w-9 object-contain" />
+      <span className="font-display text-xl font-extrabold text-ink">Click-2-<span className="text-primary">Clean</span></span>
+    </a>;
+}
+const catStyle = { bio: { c: "text-bio-ink", b: "bg-bio", I: Leaf, l: "Wet" }, nonbio: { c: "text-nonbio-ink", b: "bg-nonbio", I: Recycle, l: "Dry" }, hazard: { c: "text-hazard-ink", b: "bg-hazard", I: AlertTriangle, l: "Hazardous" } };
+const stepIcons = [Camera, Cpu, MapPin, BellRing];
+const featIcons = [Cpu, MapPin, BellRing, Map, ListChecks, BarChart3];
+const featChip = ["bg-tint text-bio-ink", "bg-nonbio text-primary-foreground", "bg-accent text-ink", "bg-primary text-primary-foreground", "bg-tint text-nonbio-ink", "bg-hazard text-primary-foreground"];
+const faqChips = [
+  { b: "bg-bio text-card", I: Leaf },
+  { b: "bg-nonbio text-card", I: Recycle },
+  { b: "bg-bio text-card", I: MapPin },
+  { b: "bg-accent text-ink", I: BellRing },
+  { b: "bg-tint text-bio-ink", I: CheckCircle2 }
+];
+const featSpan = ["lg:col-span-2", "", "", "", "", "lg:col-span-2"];
+function Index() {
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(0);
+  const root = useRef(null);
+  useMotion(root, setStep);
+  useEffect(() => {
+    const l = getLenis();
+    if (open) l?.stop();
+    else l?.start();
+  }, [open]);
+  return <div id="top" ref={root} className="page-bg min-h-screen overflow-x-clip font-sans text-body">
+      <div className="progress fixed left-0 top-0 z-[60] h-1 w-full origin-left scale-x-0 bg-primary" aria-hidden />
+      <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur">
+        <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2" aria-label="Main">
+          <Logo />
+          <ul className="hidden gap-1 lg:flex">
+            {C.nav.map((n) => <li key={n.href}><a data-nav href={n.href} className="flex min-h-11 items-center rounded-full px-3 text-base font-medium text-ink hover:bg-tint">{n.label}</a></li>)}
+          </ul>
+          <div className="hidden gap-2 lg:flex">
+            <Link to={C.links.admin} className={`${outline} py-2`}>Admin Login</Link>
+            <Link to={C.links.report} className={`${primary} py-2`}>Report Waste</Link>
+          </div>
+          <button className="flex h-11 w-11 items-center justify-center rounded-lg text-ink lg:hidden focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setOpen(!open)} aria-label="Toggle menu" aria-expanded={open}>
+            {open ? <X /> : <Menu />}
+          </button>
+        </nav>
+        {open && <div className="border-t border-border bg-background px-4 pb-4 lg:hidden">
+            {C.nav.map((n) => <a data-nav key={n.href} href={n.href} onClick={() => setOpen(false)} className="block py-3 font-medium text-ink">{n.label}</a>)}
+            <div className="mt-2 grid gap-2"><Link to={C.links.report} className={primary}>Report Waste</Link><Link to={C.links.admin} className={outline}>Admin Login</Link></div>
+          </div>}
+      </header>
+
+      <main>
+        {
+    /* 1 HERO */
+  }
+        <section className="hero-dots">
+          <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-14 md:grid-cols-2 md:py-20">
+            <Reveal>
+              <span className="inline-flex items-center rounded-full border-2 border-ink bg-accent px-3 py-1 text-sm font-bold uppercase tracking-widest text-ink shadow-[3px_3px_0_var(--ink)]">{C.hero.badge}</span>
+              <h1 className="hero-title mt-4 text-4xl font-extrabold leading-[1.08] text-ink md:text-5xl" aria-label={C.hero.title}>
+                {C.hero.title.split(" ").map((w, i) => <span key={i} aria-hidden className="inline-block overflow-hidden pb-1 align-bottom"><span className={`word inline-block ${w === "Cleaner" ? "marker" : ""}`}>{w}&nbsp;</span></span>)}
+              </h1>
+              <p className="mt-4 max-w-md text-lg text-body">{C.hero.sub}</p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link to={C.links.report} className={`${btn} magnetic border-2 border-ink bg-accent text-ink shadow-[4px_4px_0_var(--ink)] hover:bg-accent/90`}><Camera className="h-5 w-5" />Report Waste</Link>
+              </div>
+            </Reveal>
+            <div className="relative h-[340px] md:h-[500px]">
+              <span className="sticker absolute -top-5 right-0 z-10 rotate-3 text-sm md:right-6 md:top-4">{C.stickers[0]}</span>
+              <CanvasSlot Scene={HeroScene} className="absolute inset-0" fallback={<div className="flex h-full items-end justify-center gap-4 pb-10" role="img" aria-label="Green, blue and red waste bins">
+                  {[["bg-bio", Leaf, "Wet"], ["bg-nonbio", Recycle, "Dry"], ["bg-hazard", AlertTriangle, "Hazardous"]].map(([c, I, t], i) => {
+    const Ic = I;
+    return <div key={i} className="flex flex-col items-center gap-2"><div className={`flex h-36 w-24 items-center justify-center rounded-b-2xl rounded-t-md ${c} text-primary-foreground shadow-soft`}><Ic className="h-8 w-8" /></div><span className="rounded-full bg-card px-2 py-0.5 text-xs font-bold text-ink">{t}</span></div>;
+  })}
+                </div>} />
+            </div>
+          </div>
+        </section>
+
+        {
+    /* 2 KNOW YOUR WASTE */
+  }
+        <section id="categories" className="dots-mint scroll-mt-20 py-20">
+          <div className="mx-auto max-w-6xl px-4">
+            <Heading eyebrow="Waste categories" title="Know your waste" note="drag it, drop it, ace it" className="mb-2" />
+            <Reveal><SortGame /></Reveal>
+            <div className="mt-14 grid gap-6 md:grid-cols-3">
+              {C.categories.map((c, ci) => {
+    const s = catStyle[c.k];
+    return <Reveal key={c.t}>
+                  <article className="card-c lift h-full overflow-hidden">
+                    <div className="flex items-center gap-4 p-5">
+                      <img src={C.categoryThumbs[ci]} alt={c.items[0]} loading="lazy" className="h-24 w-24 shrink-0 rounded-2xl border border-ink/15 bg-card object-contain" />
+                      <div>
+                        <span className={`inline-flex items-center gap-1 rounded-full ${s.b} px-2.5 py-1 text-xs font-bold text-primary-foreground`}><s.I className="h-3.5 w-3.5" aria-hidden />{s.l}</span>
+                        <h3 className={`mt-1 text-xl font-bold ${s.c}`}>{c.t}</h3>
+                      </div>
+                    </div>
+                    <div className="px-5 pb-5">
+                      <ul className="flex flex-wrap gap-2">{c.items.map((x) => <li key={x} className="rounded-full bg-tint px-3 py-1 text-sm text-ink">{x}</li>)}</ul>
+                      <p className="mt-3 text-base text-ink">{c.tip}</p>
+                    </div>
+                  </article>
+                </Reveal>;
+  })}
+            </div>
+          </div>
+        </section>
+
+        {
+    /* 3 HOW IT WORKS */
+  }
+        <section id="how" className="story relative scroll-mt-20 bg-tint" style={{ height: "320vh" }}>
+          <div className="sticky top-16 flex min-h-[calc(100vh-4rem)] items-center py-8">
+            <div className="mx-auto grid w-full max-w-6xl items-center gap-6 px-4 md:grid-cols-2 md:gap-10">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-widest text-primary">How it works</p>
+                <h2 className="mt-1 text-3xl font-extrabold md:text-5xl">Four simple steps</h2>
+                <ol className="mt-4 space-y-2 md:mt-8 md:space-y-3">
+                  {C.steps.map((s, i) => {
+    const I = stepIcons[i];
+    const on = i === step;
+    return <li key={s.t} aria-current={on ? "step" : void 0} className={`flex items-center gap-3 rounded-3xl p-2 transition md:p-3 ${on ? "bg-card shadow-soft" : "opacity-80"}`}>
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl md:h-14 md:w-14 ${on ? "bg-primary text-primary-foreground" : "bg-card text-primary"}`}><I className="h-5 w-5" /></div>
+                      <div><h3 className="text-base font-bold md:text-xl">{i + 1}. {s.t}</h3><p className={`text-sm text-ink md:text-base ${on ? "" : "hidden md:block"}`}>{s.d}</p></div>
+                    </li>;
+  })}
+                </ol>
+              </div>
+              <div className="hidden md:block"><Phone step={step} /></div>
+            </div>
+          </div>
+        </section>
+
+        {
+    /* 4 FEATURES */
+  }
+        <section id="features" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20">
+          <Heading eyebrow="Features" title="Everything needed to keep streets clean" />
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {C.features.map((f, i) => {
+    const I = featIcons[i];
+    return <Reveal key={f.t} className={featSpan[i]}>
+                <div className="card-c lift h-full p-6">
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${featChip[i]}`}><I className="h-7 w-7" /></div>
+                  <h3 className="mt-4 text-xl font-bold">{f.t}</h3>
+                  <p className="mt-1 text-base text-body">{f.d}</p>
+                </div>
+              </Reveal>;
+  })}
+          </div>
+        </section>
+
+        {
+    /* 5 SAMPLE SPOTS */
+  }
+        <section className="bg-tint py-20">
+          <div className="mx-auto max-w-6xl px-4">
+            <Heading eyebrow="Sample spots" title="Reported vs Cleaned" />
+            <div className="grid items-start gap-6 md:grid-cols-3">{C.spots.map((s) => <Reveal key={s.t}><SpotCard {...s} /></Reveal>)}</div>
+            <p className="mt-4 text-center text-sm font-medium text-ink">Sample photos</p>
+          </div>
+        </section>
+
+        {
+    /* 6 NIGAM */
+  }
+        <section id="nigam" className="scroll-mt-20 py-20">
+          <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 lg:grid-cols-5">
+            <Reveal className="lg:col-span-2">
+              <p className="text-sm font-bold uppercase tracking-widest text-primary">For Nagar Nigam</p>
+              <h2 className="mt-2 text-4xl font-extrabold md:text-5xl">One dashboard for every complaint</h2>
+              <ul className="mt-6 space-y-3">{C.nigam.map((n) => <li key={n} className="flex items-center gap-3 text-ink"><CheckCircle2 className="h-6 w-6 text-primary" />{n}</li>)}</ul>
+            </Reveal>
+            <Reveal className="lg:col-span-3 [perspective:1200px]"><Dashboard /></Reveal>
+          </div>
+        </section>
+
+        <section className="bg-tint py-20">
+          <Reveal className="mx-auto max-w-3xl px-4 text-center">
+            <h2 className="text-4xl font-extrabold md:text-5xl">Why it matters</h2>
+            <p className="mt-4 text-lg text-ink">{C.why.text}</p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">{C.why.badges.map((b, i) => <span key={b} className={`sticker text-sm ${i ? "rotate-2" : "-rotate-2"}`}>{b}</span>)}</div>
+          </Reveal>
+        </section>
+
+        {
+    /* 7 FAQ */
+  }
+        <section id="faq" className="dots-mint relative scroll-mt-20 overflow-hidden py-20">
+          <Leaf className="pointer-events-none absolute left-5 top-24 hidden h-10 w-10 -rotate-12 text-bio lg:block lg:h-14 lg:w-14" />
+          <BottleDoodle className="pointer-events-none absolute bottom-32 right-6 hidden h-16 w-16 rotate-12 text-nonbio lg:block" />
+          <Recycle className="pointer-events-none absolute bottom-24 left-8 hidden h-12 w-12 rotate-6 text-primary lg:block" />
+          <div className="relative mx-auto max-w-3xl px-4">
+            <div className="relative md:pt-28">
+              <div className="mb-4 flex justify-center md:mb-0">
+                <span className="sticker -rotate-3 text-sm md:absolute md:right-2 md:top-16">{C.faqDecor.sticker}</span>
+              </div>
+              <Heading eyebrow="FAQ" title="Questions, answered" />
+            </div>
+            <Accordion type="single" collapsible defaultValue="q0" className="space-y-4">
+              {C.faq.map((f, i) => {
+    const chip = faqChips[i % faqChips.length];
+    const Ico = chip.I;
+    return <AccordionItem key={f.q} value={`q${i}`} className="overflow-hidden rounded-[20px] border-2 border-ink bg-card shadow-[5px_5px_0_var(--ink)]">
+                    <AccordionTrigger className="min-h-11 items-center gap-3 px-5 py-4 text-left text-lg font-semibold text-ink hover:no-underline">
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-ink ${chip.b}`} aria-hidden><Ico className="h-4 w-4" /></span>
+                      <span className="flex-1 text-left">{f.q}</span>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-5 pb-5 text-base text-body-deep">{f.a}</AccordionContent>
+                  </AccordionItem>;
+  })}
+            </Accordion>
+            <div className="mt-10 flex flex-col items-center gap-4 text-center">
+              <p className="font-semibold text-ink">{C.faqDecor.still}</p>
+              <Link to={C.links.report} className={`${btn} border-2 border-ink bg-accent text-ink shadow-[4px_4px_0_var(--ink)] hover:bg-accent/90`}><Camera className="h-5 w-5" />Report Waste</Link>
+            </div>
+          </div>
+        </section>
+
+        {
+    /* 8 CTA */
+  }
+        <section className="bg-tint py-20">
+          <Reveal className="mx-auto max-w-3xl px-4 text-center">
+            <span className="sticker -rotate-3 text-sm">{C.stickers[0]}</span>
+            <h2 className="mt-4 text-4xl font-extrabold md:text-6xl">Spotted garbage? Click it, clean it.</h2>
+            <p className="mt-3 text-lg text-ink">Your one photo can get a street cleaned.</p>
+            <Link to={C.links.report} className={`${primary} mt-8 px-10 py-4 text-xl`}><Camera className="h-6 w-6" />Report Waste</Link>
+            <p className="mt-3 text-sm text-ink">{C.reportIncludes}</p>
+          </Reveal>
+        </section>
+      </main>
+
+      <footer className="border-t border-border bg-secondary pb-28 pt-12 lg:pb-12">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-3">
+          <div><Logo /><p className="mt-2 text-ink">Snap. Sort. Alert.</p>
+            <div className="mt-3 flex flex-wrap gap-2">{C.why.badges.map((b) => <span key={b} className="rounded-full border border-ink/30 bg-card px-3 py-1 text-xs font-semibold text-ink">{b}</span>)}</div></div>
+          <ul className="grid grid-cols-2 gap-1">{C.nav.map((n) => <li key={n.href}><a data-nav href={n.href} className="flex min-h-11 items-center text-ink hover:text-primary">{n.label}</a></li>)}</ul>
+          <div className="text-ink"><p className="font-bold">Project credits</p><p className="mt-1">{C.credits.mentor}</p><p>{C.credits.team}</p></div>
+        </div>
+        <p className="mx-auto mt-8 max-w-6xl px-4 text-sm text-ink">{C.credits.note}</p>
+      </footer>
+
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 p-3 backdrop-blur lg:hidden">
+        <Link to={C.links.report} className={`${primary} w-full`}><Camera className="h-5 w-5" />Report Waste</Link>
+      </div>
+    </div>;
+}
+function useMotion(root, setStep) {
+  useEffect(() => startSmoothScroll(), []);
+  useEffect(() => {
+    const onClick = (e) => {
+      const a = e.target.closest("a[data-nav]");
+      const h = a?.getAttribute("href");
+      if (!h?.startsWith("#")) return;
+      e.preventDefault();
+      scrollToHash(h);
+    };
+    document.addEventListener("click", onClick);
+    const refresh = () => ScrollTrigger.refresh();
+    window.addEventListener("load", refresh);
+    document.fonts?.ready.then(refresh);
+    return () => {
+      document.removeEventListener("click", onClick);
+      window.removeEventListener("load", refresh);
+    };
+  }, []);
+  useGSAP(() => {
+    const reduced = prefersReducedMotion();
+    const q = gsap.utils.selector(root);
+    if (!reduced) gsap.from(q(".hero-title .word"), { yPercent: 110, stagger: 0.08, duration: 0.7, ease: "power3.out", delay: 0.1 });
+    gsap.to(q(".progress"), { scaleX: 1, ease: "none", scrollTrigger: { start: 0, end: "max", scrub: true } });
+    gsap.set(q(".reveal"), { opacity: 0 });
+    ScrollTrigger.batch(q(".reveal"), {
+      once: true,
+      start: "top 90%",
+      onEnter: (els) => gsap.fromTo(els, { opacity: 0, y: reduced ? 0 : 28 }, { opacity: 1, y: 0, stagger: 0.08, duration: reduced ? 0.3 : 0.7, ease: "power3.out" })
+    });
+    ScrollTrigger.create({ trigger: q(".story"), start: "top top", end: "bottom bottom", onUpdate: (s) => setStep(Math.min(3, Math.floor(s.progress * 4))) });
+    const heroSec = q("main section")[0];
+    ScrollTrigger.create({ trigger: heroSec, start: "top top", end: "bottom top", scrub: true, onUpdate: (st) => {
+      heroState.p = st.progress;
+    } });
+    if (reduced) return;
+    const mm = gsap.matchMedia();
+    mm.add("(hover: hover) and (min-width: 768px)", () => {
+      const offs = [];
+      q(".magnetic").forEach((b) => {
+        const xTo = gsap.quickTo(b, "x", { duration: 0.4 }), yTo = gsap.quickTo(b, "y", { duration: 0.4 });
+        const mv = (e) => {
+          const r = b.getBoundingClientRect();
+          xTo((e.clientX - r.left - r.width / 2) * 0.25);
+          yTo((e.clientY - r.top - r.height / 2) * 0.25);
+        };
+        const lv = () => {
+          xTo(0);
+          yTo(0);
+        };
+        b.addEventListener("pointermove", mv);
+        b.addEventListener("pointerleave", lv);
+        offs.push(() => {
+          b.removeEventListener("pointermove", mv);
+          b.removeEventListener("pointerleave", lv);
+        });
+      });
+      return () => offs.forEach((f) => f());
+    });
+    gsap.to(q(".hotspot"), { scale: 1.2, repeat: -1, yoyo: true, duration: 0.8, stagger: 0.25 });
+  }, { scope: root });
+}
+export default Index;
