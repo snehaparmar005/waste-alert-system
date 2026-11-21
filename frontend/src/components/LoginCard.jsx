@@ -2,23 +2,17 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiRequest, saveSession } from "../api/client";
 
-export default function LoginCard({ onLoginSuccess }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+export default function LoginCard({ onAuthSuccess }) {
+  const [email, setEmail] = useState("citizen@test.com");
+  const [password, setPassword] = useState("password123");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
-
-  const fillAccount = (demoEmail) => {
-    setEmail(demoEmail);
-    setPassword("password123");
-    setError("");
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
+    setError("");
 
     try {
       const data = await apiRequest("/api/login", {
@@ -26,24 +20,14 @@ export default function LoginCard({ onLoginSuccess }) {
         body: JSON.stringify({ email, password }),
       });
 
-      const normalizedSession = data.user
-        ? data
-        : {
-            token: data.token,
-            user: {
-              name: data.name || email.split("@")[0],
-              email: data.email || email,
-              role: data.role,
-            },
-          };
+      saveSession(data);
+      onAuthSuccess(data);
 
-      saveSession(normalizedSession);
-      onLoginSuccess(normalizedSession);
-
-      const userRole = normalizedSession.user.role;
-      if (userRole === "citizen") navigate("/report");
-      else if (userRole === "gov") navigate("/gov/dashboard");
-      else if (userRole === "admin") navigate("/admin/dashboard");
+      const role = data?.user?.role;
+      if (role === "admin") navigate("/admin/dashboard");
+      else if (role === "gov") navigate("/gov/dashboard");
+      else if (role === "worker") navigate("/worker/dashboard");
+      else navigate("/report");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -51,89 +35,106 @@ export default function LoginCard({ onLoginSuccess }) {
     }
   };
 
+  const fillDemo = (demoEmail) => {
+    setEmail(demoEmail);
+    setPassword("password123");
+    setError("");
+  };
+
   return (
-    <div className="max-w-md mx-auto my-12 px-4">
-      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
-        <h1 className="text-2xl font-bold text-[#0F4C5C] text-center">Sign In</h1>
-        <p className="text-sm text-gray-500 text-center mt-1 mb-6">
-          Access Click-2-Clean Smart City Portal
-        </p>
+    <div className="min-h-[82vh] flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-sm border border-gray-200 p-8">
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-extrabold text-[#0B4650]">Sign In</h1>
+          <p className="text-xs text-gray-500 mt-1">
+            Access Click-2-Clean Smart City Portal
+          </p>
+        </div>
 
         {error && (
-          <div role="alert" className="bg-red-50 text-red-700 text-xs p-3 rounded-lg mb-4 border border-red-200">
+          <div
+            role="alert"
+            className="bg-red-50 text-red-700 text-xs p-3.5 rounded-xl mb-4 border border-red-200"
+          >
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="login-email" className="block text-sm font-medium mb-1">Email Address</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+              Email Address
+            </label>
             <input
-              id="login-email"
               type="email"
               required
-              placeholder="Enter your registered email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm min-h-[44px]"
+              className="w-full bg-[#EEF4FF] border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-[#159B43]"
             />
           </div>
 
           <div>
-            <label htmlFor="login-pass" className="block text-sm font-medium mb-1">Password</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+              Password
+            </label>
             <input
-              id="login-pass"
               type="password"
               required
-              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm min-h-[44px]"
+              className="w-full bg-[#EEF4FF] border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-[#159B43]"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#0F4C5C] hover:bg-[#0b3945] text-white font-semibold py-2.5 rounded-lg min-h-[44px] disabled:opacity-50"
+            className="w-full bg-[#0B4650] hover:bg-[#08353d] text-white font-semibold py-3 rounded-xl text-sm shadow-sm transition disabled:opacity-50"
           >
             {loading ? "Signing in..." : "Login"}
           </button>
         </form>
 
-        {/* Quick-fill helpers that still authenticate via MySQL backend */}
-        <div className="mt-6 pt-4 border-t border-gray-100">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 text-center mb-2.5">
-            Fill Local Test Credentials
+        <div className="mt-6 pt-5 border-t border-gray-100">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 text-center mb-3">
+            Fill Test Credentials
           </p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-semibold">
             <button
               type="button"
-              onClick={() => fillAccount("citizen@test.com")}
-              className="bg-[#EAF5EE] hover:bg-emerald-100 text-[#0F4C5C] text-xs font-semibold py-2 rounded-lg"
+              onClick={() => fillDemo("citizen@test.com")}
+              className="py-2 px-2 rounded-lg bg-[#EAF5EE] text-[#159B43] hover:bg-emerald-100 transition"
             >
               Citizen
             </button>
             <button
               type="button"
-              onClick={() => fillAccount("officer@nagarnigam.gov.in")}
-              className="bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold py-2 rounded-lg"
+              onClick={() => fillDemo("officer@nagarnigam.gov.in")}
+              className="py-2 px-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition"
             >
               Nagar Nigam
             </button>
             <button
               type="button"
-              onClick={() => fillAccount("admin@nagarnigam.gov.in")}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold py-2 rounded-lg"
+              onClick={() => fillDemo("worker@nagarnigam.gov.in")}
+              className="py-2 px-2 rounded-lg bg-teal-50 text-[#0B4650] hover:bg-teal-100 transition"
+            >
+              Worker
+            </button>
+            <button
+              type="button"
+              onClick={() => fillDemo("admin@nagarnigam.gov.in")}
+              className="py-2 px-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
             >
               Admin
             </button>
           </div>
         </div>
 
-        <p className="text-sm text-center text-gray-600 mt-5">
+        <p className="text-xs text-center text-gray-500 mt-5">
           Need a citizen account?{" "}
-          <Link to="/register" className="text-[#2E9E5B] font-semibold hover:underline">
+          <Link to="/register" className="text-[#159B43] font-bold hover:underline">
             Register
           </Link>
         </p>
