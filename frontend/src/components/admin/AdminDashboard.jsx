@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import { apiRequest, getSession } from "../../api/client";
+import { openInMaps } from "../../utils/openMap";
 
 export default function AdminDashboard() {
   const [reports, setReports] = useState([]);
@@ -119,7 +120,7 @@ export default function AdminDashboard() {
                   <Popup>
                     <div className="text-xs">
                       <p className="font-bold">#{r.id} • {getLabel(r)}</p>
-                      <p>Status: {r.status}</p>
+                      <p>Status: {r.status}</p> <p className="font-mono text-[11px]">GPS: {r.latitude}, {r.longitude}</p><button type="button" onClick={() => openInMaps(r.latitude, r.longitude)} className="mt-1 bg-[#0B4650] text-white text-[11px] font-semibold px-2 py-1 rounded">Open with Map</button>
                     </div>
                   </Popup>
                 </Marker>

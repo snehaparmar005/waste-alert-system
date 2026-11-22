@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../api/client";
+import { openInMaps } from "../../utils/openMap";
 
 export default function AdminReports() {
   const [reports, setReports] = useState([]);

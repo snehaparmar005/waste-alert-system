@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import { apiRequest, getSession } from "../../api/client";
+import { openInMaps } from "../../utils/openMap";
 
 export default function GovDashboard() {
   const [reports, setReports] = useState([]);
@@ -111,7 +112,18 @@ export default function GovDashboard() {
                 <Popup>
                   <div className="text-xs space-y-1">
                     <p className="font-bold">#{r.id} • {getCategoryLabel(r)}</p>
-                    <p>Status: {r.status}</p>
+                    <p>Status: {r.status}</p> <p className="font-mono text-[11px]">GPS: {r.latitude}, {r.longitude}</p><button type="button" onClick={() => openInMaps(r.latitude, r.longitude)} className="mt-1 bg-[#0B4650] text-white text-[11px] font-semibold px-2 py-1 rounded">Open with Map</button>
+                    <p className="font-mono text-[11px] text-gray-600">
+  GPS: {r.latitude}, {r.longitude}
+</p>
+<button
+  type="button"
+  onClick={() => openInMaps(r.latitude, r.longitude)}
+  className="mt-1 bg-[#0B4650] text-white text-[11px] font-semibold px-2.5 py-1 rounded block"
+>
+  Open with Map
+</button>
+
                     <Link to={`/gov/report/${r.id}`} className="text-[#159B43] font-bold underline">
                       Inspect & Update →
                     </Link>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../api/client";
-
+import { openInMaps } from "../utils/openMap";
 export default function MyReportsTimeline() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +88,7 @@ export default function MyReportsTimeline() {
                     {typeof r.confidence === "number" ? ` (${(r.confidence * 100).toFixed(0)}%)` : ""}
                   </span>
                 </div>
-                <p className="text-sm text-gray-700 mt-1">{r.remarks || "No landmark remarks"}</p>
+                <p className="text-sm text-gray-700 mt-1">{r.remarks || "No landmark remarks"}</p> <div className="mt-2 flex items-center justify-between gap-2"><span className="text-xs font-mono text-gray-500">GPS: {r.latitude}, {r.longitude}</span><button type="button" onClick={() => openInMaps(r.latitude, r.longitude)} className="bg-[#0B4650] text-white text-xs font-semibold px-3 py-1 rounded-lg">Open with Map</button></div>
                 <p className="text-xs text-gray-400 mt-1">
                   {r.ward || "Ward 12 - Morar"} • {getCoordText(r)}
                 </p>
