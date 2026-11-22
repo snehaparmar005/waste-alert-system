@@ -6,8 +6,8 @@ import HomePage from "./components/HomePage";
 import LoginCard from "./components/LoginCard";
 import RegisterCard from "./components/RegisterCard";
 import ReportWaste from "./components/ReportWaste";
-import MyReports from "./components/MyReports";
-import ProfileSettings from "./components/ProfileSettings";
+import MyReportsTimeline from "./components/MyReportsTimeline";
+import UserProfile from "./components/UserProfile";
 import GovDashboard from "./components/gov/GovDashboard";
 import GovReports from "./components/gov/GovReports";
 import AdminDashboard from "./components/admin/AdminDashboard";
@@ -55,11 +55,11 @@ export default function App() {
           />
           <Route
             path="/my-reports"
-            element={user?.role === "citizen" ? <MyReports /> : <Navigate to="/login" replace />}
+            element={user?.role === "citizen" ? <MyReportsTimeline /> : <Navigate to="/login" replace />}
           />
           <Route
             path="/profile"
-            element={user ? <ProfileSettings /> : <Navigate to="/login" replace />}
+            element={user ? <UserProfile /> : <Navigate to="/login" replace />}
           />
 
           {/* Worker Route */}
