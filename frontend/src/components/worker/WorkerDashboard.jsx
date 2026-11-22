@@ -1,3 +1,4 @@
+import { openInMaps } from "../../utils/openMap";
 import { useEffect, useState } from "react";
 import { apiRequest, getSession, getImageUrl } from "../../api/client";
 
@@ -194,7 +195,7 @@ export default function WorkerDashboard() {
                   <div className="p-4 pt-0 flex flex-col sm:flex-row gap-2.5">
                     <button
                       type="button"
-                      onClick={() => openGoogleMaps(task.latitude, task.longitude)}
+                      onClick={() => openInMaps(task.latitude, task.longitude)}
                       className="flex-1 bg-[#0B4650] hover:bg-[#08353d] text-white font-semibold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition"
                     >
                       <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
