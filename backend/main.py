@@ -59,7 +59,7 @@ def predict_waste(image_path: str) -> dict:
         _model = tf.keras.models.load_model(MODEL_PATH, compile=False)
     img = Image.open(image_path).convert("RGB").resize((224, 224))
     arr = np.asarray(img, dtype=np.float32)
-    preds = _model.predict(np.expand_dims(arr, axis=0), verbose=0)[0]
+    preds = _model.predict(np.expand_dims(arr, axis=0), verbose=0)
     idx = int(np.argmax(preds))
     conf = round(float(preds[idx]), 4)
     gc.collect()
@@ -84,7 +84,7 @@ def verify_pw(pw: str, stored: str) -> bool:
 def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authentication required.")
-    token = authorization.split(" ", 1)[1].strip()
+    token = authorization.split(" ", 1).strip()
     uid = verify_token(token)
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid session.")
@@ -115,20 +115,26 @@ class PatchReportSchema(BaseModel):
 def seed_users():
     try:
         conn = get_db_connection()
-        with conn.cursor() as cur:
-            for name, email, role in [
-                ("Aarav Sharma", "citizen@test.com", "citizen"),
-                ("Officer Verma", "officer@nagarnigam.gov.in", "gov"),
-                ("Ramesh Patel", "worker@nagarnigam.gov.in", "worker"),
-                ("System Admin", "admin@nagarnigam.gov.in", "admin"),
-            ]:
-                cur.execute("SELECT id FROM users WHERE email = %s", (email,))
-                if not cur.fetchone():
-                    cur.execute("INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, %s)", (name, email, hash_pw("password123"), role))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
+        try:
+            with conn.cursor() as cur:
+                cur.execute("ALTER TABLE users MODIFY COLUMN role VARCHAR(32) NOT NULL DEFAULT 'citizen'")
+                for name, email, role in [
+                    ("Aarav Sharma", "citizen@test.com", "citizen"),
+                    ("Officer Verma", "officer@nagarnigam.gov.in", "gov"),
+                    ("Ramesh Patel", "worker@nagarnigam.gov.in", "worker"),
+                    ("System Admin", "admin@nagarnigam.gov.in", "admin"),
+                ]:
+                    cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+                    if not cur.fetchone():
+                        cur.execute(
+                            "INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, %s)",
+                            (name, email, hash_pw("password123"), role),
+                        )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print("Seed warning:", e)
 
 @app.on_event("startup")
 def on_startup():
@@ -154,7 +160,10 @@ def register(payload: RegisterSchema):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, 'citizen')", (payload.name, payload.email.lower().strip(), hash_pw(payload.password)))
+            cur.execute(
+                "INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, 'citizen')",
+                (payload.name, payload.email.lower().strip(), hash_pw(payload.password)),
+            )
         conn.commit()
         return {"message": "Registered"}
     finally:
@@ -227,6 +236,8 @@ async def create_report(
         return format_row(row)
     finally:
         conn.close()
+    finally:
+        conn.close()
 
 @app.get("/api/reports")
 def get_reports(user: dict = Depends(get_current_user)):
@@ -261,8 +272,49 @@ def patch_report(report_id: int, payload: PatchReportSchema, user: dict = Depend
         with conn.cursor() as cur:
             if payload.corrected_slug:
                 cur.execute("UPDATE reports SET corrected_slug = %s WHERE id = %s", (payload.corrected_slug, report_id))
-            if payload.status:
-                cur.execute("UPDATE reports SET status = %s WHERE id = %s", (payload.status, report_id))
-            cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
-            row = cur.fetchone()
-        conn.commit()
+Use code with caution.
+if payload.status:
+cur.execute("UPDATE reports SET status = %s WHERE id = %s", (payload.status, report_id))
+cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
+row = cur.fetchone()
+conn.commit()
+return format_row(row)
+finally:
+conn.close()
+@app.delete("/api/reports/{report_id}")
+def del_report(report_id: int, user: dict = Depends(get_current_user)):
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute("DELETE FROM reports WHERE id = %s", (report_id,))
+conn.commit()
+return {"deleted": True}
+finally:
+conn.close()
+@app.get("/api/admin/users")
+def list_users(user: dict = Depends(get_current_user)):
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute("SELECT id, name, email, role FROM users ORDER BY id ASC")
+return cur.fetchall()
+finally:
+conn.close()
+@app.get("/api/admin/wards")
+def list_wards(user: dict = Depends(get_current_user)):
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute("SELECT * FROM wards ORDER BY id ASC")
+return cur.fetchall()
+finally:
+conn.close()
+@app.get("/api/admin/alerts")
+def list_alerts(user: dict = Depends(get_current_user)):
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute("SELECT * FROM alerts ORDER BY id DESC")
+return cur.fetchall()
+finally:
+conn.close()
