@@ -83,7 +83,7 @@ export default function GovReports() {
                 <td className="p-4">{r.ward || "Ward 12 - Morar"}</td>
                 <td className="p-4 uppercase text-xs font-bold">{r.status}</td>
                 <td className="p-4">
-                  <Link to={`/gov/report/${r.id}`} className="text-[#0F4C5C] font-semibold hover:underline">
+                  <button type="button" onClick={() => openInMaps(r.latitude, r.longitude)} className="bg-[#0B4650] text-white text-xs font-semibold px-2.5 py-1 rounded mr-2">Open with Map ({r.latitude}, {r.longitude})</button><Link to={`/gov/report/${r.id}`} className="text-[#0F4C5C] font-semibold hover:underline">
                     View & Update
                   </Link>
                 </td>
