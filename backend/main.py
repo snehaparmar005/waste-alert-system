@@ -236,8 +236,6 @@ async def create_report(
         return format_row(row)
     finally:
         conn.close()
-    finally:
-        conn.close()
 
 @app.get("/api/reports")
 def get_reports(user: dict = Depends(get_current_user)):
