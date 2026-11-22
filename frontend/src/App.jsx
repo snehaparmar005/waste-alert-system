@@ -48,7 +48,6 @@ export default function App() {
             element={user ? <Navigate to={getHomePath(user.role)} replace /> : <RegisterCard onAuthSuccess={handleAuthSuccess} />}
           />
 
-          {/* Citizen Routes */}
           <Route
             path="/report"
             element={user?.role === "citizen" ? <ReportWaste /> : <Navigate to="/login" replace />}
@@ -62,13 +61,11 @@ export default function App() {
             element={user ? <UserProfile /> : <Navigate to="/login" replace />}
           />
 
-          {/* Worker Route */}
           <Route
             path="/worker/dashboard"
             element={user?.role === "worker" ? <WorkerDashboard /> : <Navigate to="/login" replace />}
           />
 
-          {/* Nagar Nigam Routes */}
           <Route
             path="/gov/dashboard"
             element={user?.role === "gov" ? <GovDashboard /> : <Navigate to="/login" replace />}
@@ -78,7 +75,6 @@ export default function App() {
             element={user?.role === "gov" ? <GovReports /> : <Navigate to="/login" replace />}
           />
 
-          {/* Admin Routes */}
           <Route
             path="/admin/dashboard"
             element={user?.role === "admin" ? <AdminDashboard /> : <Navigate to="/login" replace />}
