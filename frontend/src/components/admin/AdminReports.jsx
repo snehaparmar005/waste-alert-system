@@ -59,7 +59,7 @@ export default function AdminReports() {
                 <td className="p-4">
                   <select
                     value={r.status}
-                    onChange={(e) => openInMaps(r.latitude, r.longitude)} className="bg-[#0B4650] text-white text-xs font-semibold px-2.5 py-1 rounded mr-2">Open with Map ({r.latitude}, {r.longitude})</button><button type="button" onClick={() => handleStatus(r.id, e.target.value)}
+                    onChange={(e) => handleStatus(r.id, e.target.value)}
                     className="border rounded px-2 py-1 text-xs bg-white min-h-[36px]"
                   >
                     <option value="reported">reported</option>
