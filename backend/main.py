@@ -367,6 +367,8 @@ def list_wards(user: dict = Depends(get_current_user)):
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM wards ORDER BY id ASC")
+            return cur.fetchall()
+    finally:
         conn.close()
 @app.get("/api/admin/alerts")
 def list_alerts(user: dict = Depends(get_current_user)):
