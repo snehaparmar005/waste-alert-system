@@ -270,7 +270,6 @@ def patch_report(report_id: int, payload: PatchReportSchema, user: dict = Depend
         with conn.cursor() as cur:
             if payload.corrected_slug:
                 cur.execute("UPDATE reports SET corrected_slug = %s WHERE id = %s", (payload.corrected_slug, report_id))
-Use code with caution.
 if payload.status:
 cur.execute("UPDATE reports SET status = %s WHERE id = %s", (payload.status, report_id))
 cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
