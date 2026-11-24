@@ -315,3 +315,5 @@ cur.execute("SELECT * FROM alerts ORDER BY id DESC")
 return cur.fetchall()
 finally:
 conn.close()
+    finally:
+        conn.close()
