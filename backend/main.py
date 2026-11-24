@@ -270,50 +270,48 @@ def patch_report(report_id: int, payload: PatchReportSchema, user: dict = Depend
         with conn.cursor() as cur:
             if payload.corrected_slug:
                 cur.execute("UPDATE reports SET corrected_slug = %s WHERE id = %s", (payload.corrected_slug, report_id))
-if payload.status:
-cur.execute("UPDATE reports SET status = %s WHERE id = %s", (payload.status, report_id))
-cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
-row = cur.fetchone()
-conn.commit()
-return format_row(row)
-finally:
-conn.close()
+            if payload.status:
+                cur.execute("UPDATE reports SET status = %s WHERE id = %s", (payload.status, report_id))
+            cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
+            row = cur.fetchone()
+        conn.commit()
+        return format_row(row)
+    finally:
+        conn.close()
 @app.delete("/api/reports/{report_id}")
 def del_report(report_id: int, user: dict = Depends(get_current_user)):
-conn = get_db_connection()
-try:
-with conn.cursor() as cur:
-cur.execute("DELETE FROM reports WHERE id = %s", (report_id,))
-conn.commit()
-return {"deleted": True}
-finally:
-conn.close()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM reports WHERE id = %s", (report_id,))
+        conn.commit()
+        return {"deleted": True}
+    finally:
+        conn.close()
 @app.get("/api/admin/users")
 def list_users(user: dict = Depends(get_current_user)):
-conn = get_db_connection()
-try:
-with conn.cursor() as cur:
-cur.execute("SELECT id, name, email, role FROM users ORDER BY id ASC")
-return cur.fetchall()
-finally:
-conn.close()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, email, role FROM users ORDER BY id ASC")
+            return cur.fetchall()
+    finally:
+        conn.close()
 @app.get("/api/admin/wards")
 def list_wards(user: dict = Depends(get_current_user)):
-conn = get_db_connection()
-try:
-with conn.cursor() as cur:
-cur.execute("SELECT * FROM wards ORDER BY id ASC")
-return cur.fetchall()
-finally:
-conn.close()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM wards ORDER BY id ASC")
+            return cur.fetchall()
+    finally:
+        conn.close()
 @app.get("/api/admin/alerts")
 def list_alerts(user: dict = Depends(get_current_user)):
-conn = get_db_connection()
-try:
-with conn.cursor() as cur:
-cur.execute("SELECT * FROM alerts ORDER BY id DESC")
-return cur.fetchall()
-finally:
-conn.close()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM alerts ORDER BY id DESC")
+            return cur.fetchall()
     finally:
         conn.close()
