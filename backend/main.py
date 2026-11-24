@@ -1,4 +1,5 @@
 import os
+import io
 import gc
 import uuid
 import base64
@@ -38,10 +39,12 @@ LABEL_MAP = {c["slug"]: c["label"] for c in CLASSES}
 SECRET_KEY = os.getenv("SECRET_KEY", "click2clean-super-secret-key-2026")
 _model = None
 
+
 def create_token(user_id: int) -> str:
     payload = str(user_id)
     sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
+
 
 def verify_token(token: str) -> Optional[int]:
     try:
@@ -51,6 +54,7 @@ def verify_token(token: str) -> Optional[int]:
         return int(uid_str) if hmac.compare_digest(sig, expected) else None
     except Exception:
         return None
+
 
 def predict_waste(image_path: str) -> dict:
     global _model
@@ -70,16 +74,21 @@ def predict_waste(image_path: str) -> dict:
         "needs_retake": conf < 0.65,
     }
 
+
 def hash_pw(pw: str) -> str:
     salt = secrets.token_hex(16)
     return f"{salt}${hashlib.pbkdf2_hmac('sha256', pw.encode(), salt.encode(), 100000).hex()}"
 
+
 def verify_pw(pw: str, stored: str) -> bool:
     try:
         salt, dig = stored.split("$", 1)
-        return hmac.compare_digest(dig, hashlib.pbkdf2_hmac("sha256", pw.encode(), salt.encode(), 100000).hex())
+        return hmac.compare_digest(
+            dig, hashlib.pbkdf2_hmac("sha256", pw.encode(), salt.encode(), 100000).hex()
+        )
     except Exception:
         return False
+
 
 def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
@@ -99,24 +108,29 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     finally:
         conn.close()
 
+
 class LoginSchema(BaseModel):
     email: str
     password: str
+
 
 class RegisterSchema(BaseModel):
     name: str
     email: str
     password: str
 
+
 class PatchReportSchema(BaseModel):
     status: Optional[str] = None
     corrected_slug: Optional[str] = None
+
 
 def seed_users():
     try:
         conn = get_db_connection()
         try:
             with conn.cursor() as cur:
+                cur.execute("ALTER TABLE reports MODIFY COLUMN image_path LONGTEXT")
                 cur.execute("ALTER TABLE users MODIFY COLUMN role VARCHAR(32) NOT NULL DEFAULT 'citizen'")
                 for name, email, role in [
                     ("Aarav Sharma", "citizen@test.com", "citizen"),
@@ -136,13 +150,16 @@ def seed_users():
     except Exception as e:
         print("Seed warning:", e)
 
+
 @app.on_event("startup")
 def on_startup():
     seed_users()
 
+
 @app.get("/")
 def root_health():
     return {"status": "ok", "service": "Click-2-Clean API"}
+
 
 @app.get("/api/profile")
 def get_profile(user: dict = Depends(get_current_user)):
@@ -154,6 +171,7 @@ def get_profile(user: dict = Depends(get_current_user)):
         return {**user, "report_count": row["total"] if row else 0}
     finally:
         conn.close()
+
 
 @app.post("/api/register", status_code=201)
 def register(payload: RegisterSchema):
@@ -169,6 +187,7 @@ def register(payload: RegisterSchema):
     finally:
         conn.close()
 
+
 @app.post("/api/login")
 def login(payload: LoginSchema):
     seed_users()
@@ -182,11 +201,16 @@ def login(payload: LoginSchema):
     if not u or not verify_pw(payload.password, u["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     tok = create_token(u["id"])
-    return {"token": tok, "user": {"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"]}}
+    return {
+        "token": tok,
+        "user": {"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"]},
+    }
+
 
 @app.post("/api/logout")
 def logout():
     return {"message": "Logged out"}
+
 
 def format_row(r: dict) -> dict:
     slug = r["category_slug"]
@@ -206,6 +230,7 @@ def format_row(r: dict) -> dict:
         "status": r["status"],
     }
 
+
 @app.post("/api/reports", status_code=201)
 async def create_report(
     file: UploadFile = File(...),
@@ -222,20 +247,42 @@ async def create_report(
         f.write(raw)
 
     pred = predict_waste(fpath)
+
+    # Store compressed JPEG base64 URI in MySQL so images persist across Render restarts
+    thumb = Image.open(fpath).convert("RGB")
+    thumb.thumbnail((640, 640))
+    buf = io.BytesIO()
+    thumb.save(buf, format="JPEG", quality=75)
+    data_uri = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO reports (user_id, image_path, category_slug, confidence, needs_retake, latitude, longitude, ward, remarks, status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'reported')",
-                (user["id"], f"/uploads/{fname}", pred["slug"], pred["confidence"], pred["needs_retake"], latitude, longitude, ward, remarks),
+                (
+                    user["id"],
+                    data_uri,
+                    pred["slug"],
+                    pred["confidence"],
+                    pred["needs_retake"],
+                    latitude,
+                    longitude,
+                    ward,
+                    remarks,
+                ),
             )
             rid = cur.lastrowid
-            cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (rid,))
+            cur.execute(
+                "SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                (rid,),
+            )
             row = cur.fetchone()
         conn.commit()
         return format_row(row)
     finally:
         conn.close()
+
 
 @app.get("/api/reports")
 def get_reports(user: dict = Depends(get_current_user)):
@@ -243,75 +290,92 @@ def get_reports(user: dict = Depends(get_current_user)):
     try:
         with conn.cursor() as cur:
             if user["role"] == "citizen":
-                cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.user_id = %s ORDER BY r.id DESC", (user["id"],))
+                cur.execute(
+                    "SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.user_id = %s ORDER BY r.id DESC",
+                    (user["id"],),
+                )
             else:
-                cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id ORDER BY r.id DESC")
+                cur.execute(
+                    "SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id ORDER BY r.id DESC"
+                )
             return [format_row(r) for r in cur.fetchall()]
     finally:
         conn.close()
 
+
 @app.get("/api/reports/{report_id}")
 def get_report(report_id: int, user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
-            row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Not found")
-        return format_row(row)
-    finally:
-        conn.close()
-
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute(
+"SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+(report_id,),
+)
+row = cur.fetchone()
+if not row:
+raise HTTPException(status_code=404, detail="Not found")
+return format_row(row)
+finally:
+conn.close()
 @app.patch("/api/reports/{report_id}")
 def patch_report(report_id: int, payload: PatchReportSchema, user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            if payload.corrected_slug:
-                cur.execute("UPDATE reports SET corrected_slug = %s WHERE id = %s", (payload.corrected_slug, report_id))
-            if payload.status:
-                cur.execute("UPDATE reports SET status = %s WHERE id = %s", (payload.status, report_id))
-            cur.execute("SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s", (report_id,))
-            row = cur.fetchone()
-        conn.commit()
-        return format_row(row)
-    finally:
-        conn.close()
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+if payload.corrected_slug:
+cur.execute(
+"UPDATE reports SET corrected_slug = %s WHERE id = %s",
+(payload.corrected_slug, report_id),
+)
+if payload.status:
+cur.execute(
+"UPDATE reports SET status = %s WHERE id = %s",
+(payload.status, report_id),
+)
+cur.execute(
+"SELECT r.*, u.name AS user_name FROM reports r JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+(report_id,),
+)
+row = cur.fetchone()
+conn.commit()
+return format_row(row)
+finally:
+conn.close()
 @app.delete("/api/reports/{report_id}")
 def del_report(report_id: int, user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM reports WHERE id = %s", (report_id,))
-        conn.commit()
-        return {"deleted": True}
-    finally:
-        conn.close()
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute("DELETE FROM reports WHERE id = %s", (report_id,))
+conn.commit()
+return {"deleted": True}
+finally:
+conn.close()
 @app.get("/api/admin/users")
 def list_users(user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, name, email, role FROM users ORDER BY id ASC")
-            return cur.fetchall()
-    finally:
-        conn.close()
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute("SELECT id, name, email, role FROM users ORDER BY id ASC")
+return cur.fetchall()
+finally:
+conn.close()
 @app.get("/api/admin/wards")
 def list_wards(user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM wards ORDER BY id ASC")
-            return cur.fetchall()
-    finally:
-        conn.close()
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute("SELECT * FROM wards ORDER BY id ASC")
+return cur.fetchall()
+finally:
+conn.close()
 @app.get("/api/admin/alerts")
 def list_alerts(user: dict = Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM alerts ORDER BY id DESC")
-            return cur.fetchall()
-    finally:
-        conn.close()
+conn = get_db_connection()
+try:
+with conn.cursor() as cur:
+cur.execute("SELECT * FROM alerts ORDER BY id DESC")
+return cur.fetchall()
+finally:
+conn.close()
