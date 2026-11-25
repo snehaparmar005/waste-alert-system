@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://click-2-clean-ap.onrender.com/api/$1"
+    },
+    {
+      "source": "/uploads/(.*)",
+      "destination": "https://click-2-clean-ap.onrender.com/uploads/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

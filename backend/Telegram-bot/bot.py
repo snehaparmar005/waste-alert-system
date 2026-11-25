@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 import numpy as np
 import tensorflow as tf
 from PIL import Image
@@ -7,11 +8,13 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-MODEL_PATH = "waste_classifier (2).keras"
-CLASS_NAMES_PATH = "class_names (2).json"
+MODEL_PATH = BASE_DIR / "waste_classifier (2).keras"
+CLASS_NAMES_PATH = BASE_DIR / "class_names (2).json"
+PHOTOS_DIR = BASE_DIR / "received_photos"
 
 model = tf.keras.models.load_model(MODEL_PATH)
 
@@ -60,12 +63,12 @@ async def reply_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo = update.message.photo[-1]
 
-    os.makedirs("received_photos", exist_ok=True)
+    os.makedirs(PHOTOS_DIR, exist_ok=True)
 
     image_file = await photo.get_file()
 
     image_path = os.path.join(
-        "received_photos",
+        PHOTOS_DIR,
         f"{update.message.message_id}.jpg"
     )
 
