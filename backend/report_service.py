@@ -72,7 +72,7 @@ async def create_report_pipeline(
                 """
                 INSERT INTO reports
                 (user_id, image_path, category_slug, confidence, needs_retake, latitude, longitude, ward, remarks, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'reported')
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'submitted')
                 """,
                 (
                     user_id,
