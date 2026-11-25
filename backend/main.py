@@ -3,6 +3,7 @@ import gc
 import hashlib
 import hmac
 import io
+import math
 import os
 import tempfile
 from typing import Optional
@@ -223,6 +224,10 @@ class PatchReportSchema(BaseModel):
     corrected_slug: Optional[str] = None
     assigned_worker_id: Optional[int] = None
     description: Optional[str] = None
+    remarks: Optional[str] = None
+    ward: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class ProfileUpdateSchema(BaseModel):
@@ -244,6 +249,13 @@ class WorkerCreateSchema(BaseModel):
     name: str
     email: str
     password: str
+    phone: Optional[str] = None
+    organisation: Optional[str] = None
+
+
+class WorkerUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
     phone: Optional[str] = None
     organisation: Optional[str] = None
 
@@ -274,6 +286,7 @@ def seed_users() -> None:
                 "ALTER TABLE users ADD COLUMN organisation VARCHAR(120) NULL",
                 "ALTER TABLE users ADD COLUMN nagar_nigam_id INT NULL",
                 "ALTER TABLE reports ADD COLUMN reference_id VARCHAR(20) UNIQUE",
+                "ALTER TABLE reports ADD COLUMN IF NOT EXISTS assigned_worker_id INT NULL",
                 "ALTER TABLE reports ADD COLUMN assigned_worker_id INT NULL",
                 "ALTER TABLE reports ADD COLUMN description TEXT",
             ]
@@ -568,6 +581,9 @@ def change_password(payload: PasswordChangeSchema, user: dict = Depends(get_curr
 def format_row(row: dict) -> dict:
     slug = row["category_slug"]
     created_at = row.get("created_at")
+    status = row["status"]
+    if str(status).lower() == "reported":
+        status = "submitted"
     return {
         "id": row["id"],
         "user_id": row["user_id"],
@@ -581,9 +597,10 @@ def format_row(row: dict) -> dict:
         "longitude": float(row["longitude"]),
         "ward": row.get("ward") or "Ward 12 - Morar",
         "remarks": row.get("remarks") or "",
-        "status": row["status"],
-        "reference_id": row.get("reference_id"),
+        "status": status,
+        "reference_id": f"C2C-{int(row['id']):03d}",
         "assigned_worker_id": row.get("assigned_worker_id"),
+        "assigned_worker_name": row.get("assigned_worker_name"),
         "description": row.get("description", ""),
         "created_at": created_at.isoformat()
         if hasattr(created_at, "isoformat")
@@ -598,8 +615,8 @@ def format_row(row: dict) -> dict:
 @app.post("/api/reports", status_code=201)
 async def create_report(
     file: UploadFile = File(...),
-    latitude: float = Form(...),
-    longitude: float = Form(...),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
     remarks: str = Form(""),
     ward: str = Form("Ward 12 - Morar"),
     description: str = Form(""),
@@ -609,6 +626,24 @@ async def create_report(
     suffix = os.path.splitext(file.filename or "")[1] or ".img"
     temp_path = None
     try:
+        if latitude is None or longitude is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Latitude and longitude are required to submit a report.",
+            )
+        if (
+            not math.isfinite(latitude)
+            or not math.isfinite(longitude)
+            or not -90 <= latitude <= 90
+            or not -180 <= longitude <= 180
+        ):
+            raise HTTPException(status_code=400, detail="A valid GPS location is required.")
+        if latitude == 0 and longitude == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="The GPS location cannot be (0, 0). Detect or select a valid location.",
+            )
+
         with tempfile.NamedTemporaryFile(
             mode="wb", suffix=suffix, dir=UPLOAD_DIR, delete=False
         ) as temp_file:
@@ -669,8 +704,9 @@ async def create_report(
             )
 
             cur.execute(
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             row = cur.fetchone()
@@ -691,8 +727,9 @@ def get_reports(user: dict = Depends(get_current_user)) -> list:
     try:
         with conn.cursor() as cur:
             query = (
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id"
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id"
             )
             if user["role"] == "citizen":
                 query += " WHERE r.user_id = %s ORDER BY r.id DESC"
@@ -715,8 +752,9 @@ def get_report(report_id: int, user: dict = Depends(get_current_user)) -> dict:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             row = cur.fetchone()
@@ -748,24 +786,94 @@ def patch_report(
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             existing = cur.fetchone()
             if not existing:
                 raise HTTPException(status_code=404, detail="Report not found.")
 
-            # Citizens can only edit reports in 'submitted' status
-            if user["role"] == "citizen" and existing["status"] != "submitted":
-                raise HTTPException(
-                    status_code=403,
-                    detail="Cannot modify a report that is no longer in submitted status.",
+            if user["role"] == "citizen":
+                citizen_editable_fields = {
+                    "remarks",
+                    "ward",
+                    "latitude",
+                    "longitude",
+                    "corrected_slug",
+                    "description",
+                }
+                if existing["user_id"] != user["id"]:
+                    raise HTTPException(status_code=403, detail="You cannot edit this report.")
+                existing_status = str(existing["status"]).lower()
+                if existing_status == "reported":
+                    existing_status = "submitted"
+                if existing_status != "submitted":
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Reports can only be edited while their status is submitted.",
+                    )
+                if set(updates) - citizen_editable_fields:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Citizens may only edit report details while submitted.",
+                    )
+
+            if "latitude" in updates or "longitude" in updates:
+                latitude = updates.get("latitude")
+                longitude = updates.get("longitude")
+                if latitude is None or longitude is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Latitude and longitude must be provided together.",
+                    )
+                if (
+                    not math.isfinite(latitude)
+                    or not math.isfinite(longitude)
+                    or not -90 <= latitude <= 90
+                    or not -180 <= longitude <= 180
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="A valid GPS location is required.",
+                    )
+                if latitude == 0 and longitude == 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="The GPS location cannot be (0, 0).",
+                    )
+
+            assigned_worker_id = updates.get("assigned_worker_id")
+            if assigned_worker_id is not None:
+                if user["role"] not in ("gov", "admin"):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Only officers and administrators can assign workers.",
+                    )
+                cur.execute(
+                    "SELECT id, nagar_nigam_id FROM users "
+                    "WHERE id = %s AND role = 'worker'",
+                    (assigned_worker_id,),
                 )
+                worker = cur.fetchone()
+                if not worker:
+                    raise HTTPException(status_code=400, detail="Selected worker was not found.")
+                if (
+                    user["role"] == "gov"
+                    and worker["nagar_nigam_id"] != user["id"]
+                ):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You can only assign workers under your Nagar Nigam.",
+                    )
+                updates["status"] = "assigned"
 
             new_status = updates.get("status")
             # When assigning, require assigned_worker_id
-            if new_status == "assigned" and not updates.get("assigned_worker_id"):
+            if new_status == "assigned" and not updates.get(
+                "assigned_worker_id", existing.get("assigned_worker_id")
+            ):
                 raise HTTPException(
                     status_code=400,
                     detail="assigned_worker_id is required when setting status to 'assigned'.",
@@ -778,8 +886,9 @@ def patch_report(
                         (value, report_id),
                     )
             cur.execute(
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             row = cur.fetchone()
@@ -885,6 +994,83 @@ def create_worker(
             ip=request.client.host if request and request.client else None,
         )
         return worker
+    finally:
+        conn.close()
+
+
+@app.put("/api/workers/{worker_id}")
+def update_worker(
+    worker_id: int,
+    payload: WorkerUpdateSchema,
+    user: dict = Depends(require_role("gov", "admin")),
+    request: Request = None,
+) -> dict:
+    provided = payload.dict(exclude_unset=True)
+    if not provided:
+        raise HTTPException(status_code=400, detail="At least one field must be provided.")
+
+    updates = {}
+    if "name" in provided:
+        name = (provided["name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Worker name cannot be empty.")
+        updates["name"] = name
+    if "email" in provided:
+        email = (provided["email"] or "").strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail="Worker email cannot be empty.")
+        updates["email"] = email
+    for field in ("phone", "organisation"):
+        if field in provided:
+            value = provided[field]
+            updates[field] = value.strip() if value else None
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, nagar_nigam_id FROM users WHERE id = %s AND role = 'worker'",
+                (worker_id,),
+            )
+            worker = cur.fetchone()
+            if not worker:
+                raise HTTPException(status_code=404, detail="Worker not found.")
+            if (
+                user["role"] == "gov"
+                and worker["nagar_nigam_id"] != user["id"]
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only manage your own workers.",
+                )
+            if "email" in updates:
+                cur.execute(
+                    "SELECT id FROM users WHERE email = %s AND id <> %s",
+                    (updates["email"], worker_id),
+                )
+                if cur.fetchone():
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Email is already registered.",
+                    )
+
+            columns = ", ".join(f"{field} = %s" for field in updates)
+            cur.execute(
+                f"UPDATE users SET {columns} WHERE id = %s",
+                (*updates.values(), worker_id),
+            )
+            cur.execute(
+                "SELECT id, name, email, role, phone, organisation, nagar_nigam_id "
+                "FROM users WHERE id = %s",
+                (worker_id,),
+            )
+            updated_worker = cur.fetchone()
+        conn.commit()
+        log_audit(
+            user["id"], user["name"], "update_worker", "user", worker_id,
+            ip=request.client.host if request and request.client else None,
+        )
+        return updated_worker
     finally:
         conn.close()
 

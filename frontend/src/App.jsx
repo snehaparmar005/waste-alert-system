@@ -10,6 +10,7 @@ import MyReportsTimeline from "./components/MyReportsTimeline";
 import UserProfile from "./components/UserProfile";
 import GovDashboard from "./components/gov/GovDashboard";
 import GovReports from "./components/gov/GovReports";
+import GovWorkers from "./components/gov/GovWorkers";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import AdminReports from "./components/admin/AdminReports";
 import AdminUsers from "./components/admin/AdminUsers";
@@ -89,6 +90,10 @@ export default function App() {
           <Route
             path="/gov/reports"
             element={user?.role === "gov" ? <GovReports /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/gov/workers"
+            element={user?.role === "gov" ? <GovWorkers /> : <Navigate to="/login" replace />}
           />
 
           <Route
