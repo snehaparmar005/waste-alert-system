@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { openInMaps } from "../utils/openMap";
@@ -8,12 +8,33 @@ export default function MyReportsTimeline() {
   const [error, setError] = useState("");
   const [selected, setSelected] = useState(null);
 
-  useEffect(() => {
-    apiRequest("/api/reports")
-      .then((data) => setReports(Array.isArray(data) ? data : []))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+  const loadReports = useCallback(async () => {
+    try {
+      const data = await apiRequest("/api/reports");
+      const nextReports = Array.isArray(data) ? data : [];
+      setReports(nextReports);
+      setSelected((current) =>
+        current ? nextReports.find((report) => report.id === current.id) || current : null
+      );
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    const initialRefresh = window.setTimeout(loadReports, 0);
+    const refreshInterval = window.setInterval(loadReports, 15000);
+    window.addEventListener("focus", loadReports);
+
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", loadReports);
+    };
+  }, [loadReports]);
 
   const getCatLabel = (r) => r.category?.label || r.waste_type || "Uncategorized";
 
@@ -38,12 +59,21 @@ export default function MyReportsTimeline() {
           <h1 className="text-2xl font-bold text-[#0F4C5C]">My Waste Reports</h1>
           <p className="text-sm text-gray-600">Track AI classification and cleanup progress</p>
         </div>
-        <Link
-          to="/report"
-          className="bg-[#2E9E5B] hover:bg-[#248249] text-white px-4 py-2 rounded-xl text-sm font-semibold min-h-[44px] flex items-center"
-        >
-          + New Report
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={loadReports}
+            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold min-h-[44px]"
+          >
+            Refresh
+          </button>
+          <Link
+            to="/report"
+            className="bg-[#2E9E5B] hover:bg-[#248249] text-white px-4 py-2 rounded-xl text-sm font-semibold min-h-[44px] flex items-center"
+          >
+            + New Report
+          </Link>
+        </div>
       </div>
 
       {error && (
