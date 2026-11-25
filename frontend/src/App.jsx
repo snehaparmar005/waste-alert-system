@@ -14,6 +14,7 @@ import GovWorkers from "./components/gov/GovWorkers";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import AdminReports from "./components/admin/AdminReports";
 import AdminUsers from "./components/admin/AdminUsers";
+import AdminAuditLogs from "./components/admin/AdminAuditLogs";
 import AdminAuthorities from "./components/admin/AdminAuthorities";
 import AdminAlerts from "./components/admin/AdminAlerts";
 import WorkerDashboard from "./components/worker/WorkerDashboard";
@@ -107,6 +108,10 @@ export default function App() {
           <Route
             path="/admin/users"
             element={user?.role === "admin" ? <AdminUsers /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/admin/audit-logs"
+            element={user?.role === "admin" ? <AdminAuditLogs /> : <Navigate to="/login" replace />}
           />
           <Route
             path="/admin/authorities"

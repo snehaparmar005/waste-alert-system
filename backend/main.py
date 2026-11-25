@@ -172,18 +172,31 @@ def require_role(*roles):
 # Audit & notification helpers
 # ---------------------------------------------------------------------------
 
-def log_audit(user_id, user_name, action, entity=None, entity_id=None, details=None, ip=None):
+def log_audit(
+    user_id,
+    user_name,
+    action,
+    entity=None,
+    entity_id=None,
+    details=None,
+    ip=None,
+    user_role=None,
+):
+    detail_text = details or ""
+    if entity_id is not None:
+        detail_text = f"entity_id={entity_id}" + (
+            f"; {detail_text}" if detail_text else ""
+        )
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO audit_logs (user_id, user_name, action, entity, entity_id, ip_address, details) "
+                "INSERT INTO audit_logs "
+                "(user_id, user_name, user_role, action, entity, ip_address, details) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (user_id, user_name, action, entity, entity_id, ip, details),
+                (user_id, user_name, user_role, action, entity, ip, detail_text or None),
             )
         conn.commit()
-    except Exception:
-        pass
     finally:
         conn.close()
 
@@ -260,6 +273,12 @@ class WorkerUpdateSchema(BaseModel):
     organisation: Optional[str] = None
 
 
+class AdminUserUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Startup: seed users + ensure tables/columns
 # ---------------------------------------------------------------------------
@@ -323,16 +342,29 @@ def seed_users() -> None:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS audit_logs (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id INT NOT NULL,
+                    user_id INT,
                     user_name VARCHAR(120),
-                    action VARCHAR(100) NOT NULL,
-                    entity VARCHAR(100),
-                    entity_id INT NULL,
-                    ip_address VARCHAR(45),
+                    user_role VARCHAR(32),
+                    action VARCHAR(120),
+                    entity VARCHAR(120),
                     details TEXT,
+                    ip_address VARCHAR(64),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            audit_log_alter_stmts = [
+                "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_role VARCHAR(32) NULL",
+                "ALTER TABLE audit_logs ADD COLUMN user_role VARCHAR(32) NULL",
+                "ALTER TABLE audit_logs MODIFY COLUMN action VARCHAR(120)",
+                "ALTER TABLE audit_logs MODIFY COLUMN entity VARCHAR(120)",
+                "ALTER TABLE audit_logs MODIFY COLUMN ip_address VARCHAR(64)",
+            ]
+            for stmt in audit_log_alter_stmts:
+                try:
+                    cur.execute(stmt)
+                except Exception:
+                    pass
 
             for name, email, role in demo_users:
                 cur.execute("SELECT id FROM users WHERE email = %s", (email,))
@@ -421,7 +453,13 @@ def login(payload: LoginSchema, request: Request) -> dict:
         "email": user["email"],
         "role": user["role"],
     }
-    log_audit(user["id"], user["name"], "login", ip=request.client.host if request.client else None)
+    log_audit(
+        user["id"],
+        user["name"],
+        "login",
+        ip=request.client.host if request.client else None,
+        user_role=user["role"],
+    )
     return {"token": create_token(user["id"]), "user": public_user, **public_user}
 
 
@@ -712,9 +750,10 @@ async def create_report(
             row = cur.fetchone()
         conn.commit()
         log_audit(
-            user["id"], user["name"], "create_report", "report", report_id,
+            user["id"], user["name"], "report_created", "report", report_id,
             details=f"ref={reference_id}",
             ip=request.client.host if request and request.client else None,
+            user_role=user["role"],
         )
         return format_row(row)
     finally:
@@ -894,13 +933,21 @@ def patch_report(
             row = cur.fetchone()
         conn.commit()
 
-        # Audit & notifications for status changes
-        if new_status:
+        # Audit every report mutation and notify on status changes.
+        if updates:
+            if new_status == "cleaned":
+                audit_action = "report_cleaned"
+            elif new_status == "assigned":
+                audit_action = "report_assigned"
+            else:
+                audit_action = "report_updated"
             log_audit(
-                user["id"], user["name"], "change_status", "report", report_id,
-                details=f"status={new_status}",
+                user["id"], user["name"], audit_action, "report", report_id,
+                details=", ".join(f"{field}={value}" for field, value in updates.items()),
                 ip=request.client.host if request and request.client else None,
+                user_role=user["role"],
             )
+        if new_status:
             # Notify report owner
             create_notification(
                 existing["user_id"], "status_change",
@@ -939,7 +986,7 @@ def delete_report(report_id: int, user: dict = Depends(get_current_user)) -> dic
 # ---------------------------------------------------------------------------
 
 @app.get("/api/workers")
-def list_workers(user: dict = Depends(require_role("gov", "admin", "worker"))) -> list:
+def list_workers(user: dict = Depends(require_role("gov", "admin"))) -> list:
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -990,8 +1037,9 @@ def create_worker(
             worker = cur.fetchone()
         conn.commit()
         log_audit(
-            user["id"], user["name"], "create_worker", "user", worker_id,
+            user["id"], user["name"], "worker_created", "user", worker_id,
             ip=request.client.host if request and request.client else None,
+            user_role=user["role"],
         )
         return worker
     finally:
@@ -1067,8 +1115,10 @@ def update_worker(
             updated_worker = cur.fetchone()
         conn.commit()
         log_audit(
-            user["id"], user["name"], "update_worker", "user", worker_id,
+            user["id"], user["name"], "worker_updated", "user", worker_id,
+            details=", ".join(f"{field}={value}" for field, value in updates.items()),
             ip=request.client.host if request and request.client else None,
+            user_role=user["role"],
         )
         return updated_worker
     finally:
@@ -1094,8 +1144,9 @@ def delete_worker(
             cur.execute("DELETE FROM users WHERE id = %s", (worker_id,))
         conn.commit()
         log_audit(
-            user["id"], user["name"], "delete_worker", "user", worker_id,
+            user["id"], user["name"], "worker_deleted", "user", worker_id,
             ip=request.client.host if request and request.client else None,
+            user_role=user["role"],
         )
         return {"deleted": True}
     finally:
@@ -1146,7 +1197,7 @@ def mark_notification_read(notification_id: int, user: dict = Depends(get_curren
 # ---------------------------------------------------------------------------
 
 @app.get("/api/admin/users")
-def list_users(user: dict = Depends(get_current_user)) -> list:
+def list_users(user: dict = Depends(require_role("admin"))) -> list:
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -1159,26 +1210,52 @@ def list_users(user: dict = Depends(get_current_user)) -> list:
 
 
 @app.patch("/api/admin/users/{user_id}")
+@app.put("/api/admin/users/{user_id}")
 def admin_update_user(
     user_id: int,
-    payload: dict,
+    payload: AdminUserUpdateSchema,
     user: dict = Depends(require_role("admin")),
     request: Request = None,
 ) -> dict:
+    provided = payload.dict(exclude_unset=True)
+    if not provided:
+        raise HTTPException(status_code=400, detail="At least one field must be provided.")
+
+    updates = {}
+    if "name" in provided:
+        name = (provided["name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty.")
+        updates["name"] = name
+    if "email" in provided:
+        email = (provided["email"] or "").strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail="Email cannot be empty.")
+        updates["email"] = email
+    if "role" in provided:
+        valid_roles = {"citizen", "gov", "worker", "admin"}
+        if provided["role"] not in valid_roles:
+            raise HTTPException(status_code=400, detail="Invalid role.")
+        updates["role"] = provided["role"]
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail="User not found.")
-            if "role" in payload:
-                valid_roles = {"citizen", "gov", "worker", "admin"}
-                if payload["role"] not in valid_roles:
-                    raise HTTPException(status_code=400, detail="Invalid role.")
+            if "email" in updates:
                 cur.execute(
-                    "UPDATE users SET role = %s WHERE id = %s",
-                    (payload["role"], user_id),
+                    "SELECT id FROM users WHERE email = %s AND id <> %s",
+                    (updates["email"], user_id),
                 )
+                if cur.fetchone():
+                    raise HTTPException(status_code=409, detail="Email is already registered.")
+            columns = ", ".join(f"{field} = %s" for field in updates)
+            cur.execute(
+                f"UPDATE users SET {columns} WHERE id = %s",
+                (*updates.values(), user_id),
+            )
             cur.execute(
                 "SELECT id, name, email, role, phone, organisation, nagar_nigam_id FROM users WHERE id = %s",
                 (user_id,),
@@ -1186,9 +1263,10 @@ def admin_update_user(
             updated = cur.fetchone()
         conn.commit()
         log_audit(
-            user["id"], user["name"], "admin_update_user", "user", user_id,
-            details=str(payload),
+            user["id"], user["name"], "user_updated", "user", user_id,
+            details=", ".join(f"{field}={value}" for field, value in updates.items()),
             ip=request.client.host if request and request.client else None,
+            user_role=user["role"],
         )
         return updated
     finally:
@@ -1211,8 +1289,9 @@ def admin_delete_user(
                 raise HTTPException(status_code=404, detail="User not found.")
         conn.commit()
         log_audit(
-            user["id"], user["name"], "admin_delete_user", "user", user_id,
+            user["id"], user["name"], "user_deleted", "user", user_id,
             ip=request.client.host if request and request.client else None,
+            user_role=user["role"],
         )
         return {"deleted": True}
     finally:
@@ -1220,7 +1299,7 @@ def admin_delete_user(
 
 
 @app.get("/api/admin/wards")
-def list_wards(user: dict = Depends(get_current_user)) -> list:
+def list_wards(user: dict = Depends(require_role("admin"))) -> list:
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -1231,7 +1310,7 @@ def list_wards(user: dict = Depends(get_current_user)) -> list:
 
 
 @app.get("/api/admin/alerts")
-def list_alerts(user: dict = Depends(get_current_user)) -> list:
+def list_alerts(user: dict = Depends(require_role("admin"))) -> list:
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -1252,7 +1331,10 @@ def get_audit_logs(
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            query = "SELECT * FROM audit_logs WHERE 1=1"
+            query = (
+                "SELECT id, user_id, user_name, user_role, action, entity, "
+                "ip_address, details, created_at FROM audit_logs WHERE 1=1"
+            )
             params = []
             if action:
                 query += " AND action = %s"
@@ -1266,7 +1348,7 @@ def get_audit_logs(
             if date_to:
                 query += " AND created_at <= %s"
                 params.append(date_to)
-            query += " ORDER BY created_at DESC"
+            query += " ORDER BY id DESC"
             cur.execute(query, tuple(params))
             rows = cur.fetchall()
             for row in rows:
