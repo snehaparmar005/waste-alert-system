@@ -227,6 +227,9 @@ class PatchReportSchema(BaseModel):
 
 class ProfileUpdateSchema(BaseModel):
     name: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+    confirm_password: Optional[str] = None
     phone: Optional[str] = None
     organisation: Optional[str] = None
 
@@ -440,34 +443,96 @@ def get_profile(user: dict = Depends(get_current_user)) -> dict:
 
 
 @app.put("/api/profile")
-def update_profile(payload: ProfileUpdateSchema, user: dict = Depends(get_current_user)) -> dict:
+@app.patch("/api/profile")
+def update_profile(
+    payload: ProfileUpdateSchema,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    name = None
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty.")
+
+    current_password = payload.current_password
+    new_password = payload.new_password
+    confirm_password = payload.confirm_password
+    password_update = new_password is not None
+    if new_password is not None:
+        if not current_password:
+            raise HTTPException(
+                status_code=400,
+                detail="Current password is required to change your password.",
+            )
+        if not confirm_password:
+            raise HTTPException(
+                status_code=400,
+                detail="Password confirmation is required.",
+            )
+        if new_password != confirm_password:
+            raise HTTPException(
+                status_code=400,
+                detail="New password and confirmation do not match.",
+            )
+        if len(new_password) < 6:
+            raise HTTPException(
+                status_code=400,
+                detail="New password must be at least 6 characters.",
+            )
+
+    if (
+        name is None
+        and not password_update
+        and payload.phone is None
+        and payload.organisation is None
+    ):
+        raise HTTPException(status_code=400, detail="No fields to update.")
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
+            if new_password is not None:
+                cur.execute(
+                    "SELECT password_hash FROM users WHERE id = %s",
+                    (user["id"],),
+                )
+                password_row = cur.fetchone()
+                if not password_row or not verify_pw(
+                    current_password, password_row["password_hash"]
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Current password is incorrect.",
+                    )
+
             updates = []
             values = []
-            if payload.name is not None:
+            if name is not None:
                 updates.append("name = %s")
-                values.append(payload.name.strip())
+                values.append(name)
             if payload.phone is not None:
                 updates.append("phone = %s")
                 values.append(payload.phone.strip())
             if payload.organisation is not None:
                 updates.append("organisation = %s")
                 values.append(payload.organisation.strip())
-            if not updates:
-                raise HTTPException(status_code=400, detail="No fields to update.")
+            if new_password is not None:
+                updates.append("password_hash = %s")
+                values.append(hash_pw(new_password))
+
             values.append(user["id"])
             cur.execute(
                 f"UPDATE users SET {', '.join(updates)} WHERE id = %s",
                 tuple(values),
             )
             cur.execute(
-                "SELECT id, name, email, role, phone, organisation, nagar_nigam_id FROM users WHERE id = %s",
+                "SELECT id, name, email, role FROM users WHERE id = %s",
                 (user["id"],),
             )
             updated = cur.fetchone()
         conn.commit()
+        if not updated:
+            raise HTTPException(status_code=404, detail="User not found.")
         return updated
     finally:
         conn.close()
@@ -492,42 +557,6 @@ def change_password(payload: PasswordChangeSchema, user: dict = Depends(get_curr
             )
         conn.commit()
         return {"message": "Password updated successfully."}
-    finally:
-        conn.close()
-
-
-@app.patch("/api/profile")
-def patch_profile(payload: dict, user: dict = Depends(get_current_user)) -> dict:
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            if "name" in payload and payload["name"]:
-                cur.execute(
-                    "UPDATE users SET name = %s WHERE id = %s",
-                    (payload["name"].strip(), user["id"]),
-                )
-            if "password" in payload and payload["password"]:
-                cur.execute(
-                    "UPDATE users SET password_hash = %s WHERE id = %s",
-                    (hash_pw(payload["password"]), user["id"]),
-                )
-            if "phone" in payload:
-                cur.execute(
-                    "UPDATE users SET phone = %s WHERE id = %s",
-                    (payload["phone"], user["id"]),
-                )
-            if "organisation" in payload:
-                cur.execute(
-                    "UPDATE users SET organisation = %s WHERE id = %s",
-                    (payload["organisation"], user["id"]),
-                )
-            cur.execute(
-                "SELECT id, name, email, role, phone, organisation, nagar_nigam_id FROM users WHERE id = %s",
-                (user["id"],),
-            )
-            updated = cur.fetchone()
-        conn.commit()
-        return updated
     finally:
         conn.close()
 

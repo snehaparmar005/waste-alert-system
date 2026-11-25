@@ -30,6 +30,16 @@ export default function App() {
 
   const handleAuthSuccess = (newSession) => setSession(newSession);
   const handleLogout = () => setSession(null);
+  const handleProfileUpdate = (updatedUser) => {
+    setSession((currentSession) =>
+      currentSession
+        ? {
+            ...currentSession,
+            user: { ...(currentSession.user || {}), ...updatedUser },
+          }
+        : currentSession,
+    );
+  };
 
   return (
     <BrowserRouter>
@@ -58,7 +68,13 @@ export default function App() {
           />
           <Route
             path="/profile"
-            element={user ? <UserProfile /> : <Navigate to="/login" replace />}
+            element={
+              user ? (
+                <UserProfile onProfileUpdate={handleProfileUpdate} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
           />
 
           <Route
