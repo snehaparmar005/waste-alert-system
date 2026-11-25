@@ -3,6 +3,7 @@ import gc
 import hashlib
 import hmac
 import io
+import math
 import os
 import tempfile
 from typing import Optional
@@ -223,6 +224,10 @@ class PatchReportSchema(BaseModel):
     corrected_slug: Optional[str] = None
     assigned_worker_id: Optional[int] = None
     description: Optional[str] = None
+    remarks: Optional[str] = None
+    ward: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class ProfileUpdateSchema(BaseModel):
@@ -568,6 +573,9 @@ def change_password(payload: PasswordChangeSchema, user: dict = Depends(get_curr
 def format_row(row: dict) -> dict:
     slug = row["category_slug"]
     created_at = row.get("created_at")
+    status = row["status"]
+    if str(status).lower() == "reported":
+        status = "submitted"
     return {
         "id": row["id"],
         "user_id": row["user_id"],
@@ -581,8 +589,8 @@ def format_row(row: dict) -> dict:
         "longitude": float(row["longitude"]),
         "ward": row.get("ward") or "Ward 12 - Morar",
         "remarks": row.get("remarks") or "",
-        "status": row["status"],
-        "reference_id": row.get("reference_id"),
+        "status": status,
+        "reference_id": f"C2C-{int(row['id']):03d}",
         "assigned_worker_id": row.get("assigned_worker_id"),
         "description": row.get("description", ""),
         "created_at": created_at.isoformat()
@@ -598,8 +606,8 @@ def format_row(row: dict) -> dict:
 @app.post("/api/reports", status_code=201)
 async def create_report(
     file: UploadFile = File(...),
-    latitude: float = Form(...),
-    longitude: float = Form(...),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
     remarks: str = Form(""),
     ward: str = Form("Ward 12 - Morar"),
     description: str = Form(""),
@@ -609,6 +617,24 @@ async def create_report(
     suffix = os.path.splitext(file.filename or "")[1] or ".img"
     temp_path = None
     try:
+        if latitude is None or longitude is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Latitude and longitude are required to submit a report.",
+            )
+        if (
+            not math.isfinite(latitude)
+            or not math.isfinite(longitude)
+            or not -90 <= latitude <= 90
+            or not -180 <= longitude <= 180
+        ):
+            raise HTTPException(status_code=400, detail="A valid GPS location is required.")
+        if latitude == 0 and longitude == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="The GPS location cannot be (0, 0). Detect or select a valid location.",
+            )
+
         with tempfile.NamedTemporaryFile(
             mode="wb", suffix=suffix, dir=UPLOAD_DIR, delete=False
         ) as temp_file:
@@ -756,12 +782,54 @@ def patch_report(
             if not existing:
                 raise HTTPException(status_code=404, detail="Report not found.")
 
-            # Citizens can only edit reports in 'submitted' status
-            if user["role"] == "citizen" and existing["status"] != "submitted":
-                raise HTTPException(
-                    status_code=403,
-                    detail="Cannot modify a report that is no longer in submitted status.",
-                )
+            if user["role"] == "citizen":
+                citizen_editable_fields = {
+                    "remarks",
+                    "ward",
+                    "latitude",
+                    "longitude",
+                    "corrected_slug",
+                    "description",
+                }
+                if existing["user_id"] != user["id"]:
+                    raise HTTPException(status_code=403, detail="You cannot edit this report.")
+                existing_status = str(existing["status"]).lower()
+                if existing_status == "reported":
+                    existing_status = "submitted"
+                if existing_status != "submitted":
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Reports can only be edited while their status is submitted.",
+                    )
+                if set(updates) - citizen_editable_fields:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Citizens may only edit report details while submitted.",
+                    )
+
+            if "latitude" in updates or "longitude" in updates:
+                latitude = updates.get("latitude")
+                longitude = updates.get("longitude")
+                if latitude is None or longitude is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Latitude and longitude must be provided together.",
+                    )
+                if (
+                    not math.isfinite(latitude)
+                    or not math.isfinite(longitude)
+                    or not -90 <= latitude <= 90
+                    or not -180 <= longitude <= 180
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="A valid GPS location is required.",
+                    )
+                if latitude == 0 and longitude == 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="The GPS location cannot be (0, 0).",
+                    )
 
             new_status = updates.get("status")
             # When assigning, require assigned_worker_id

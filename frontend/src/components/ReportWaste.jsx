@@ -1,73 +1,247 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Check,
+  CircleAlert,
+  FileImage,
+  LoaderCircle,
+  LocateFixed,
+  MapPin,
+  MapPinned,
+  Send,
+  Sparkles,
+} from "lucide-react";
+import L from "leaflet";
+import {
+  MapContainer,
+  Marker,
+  Popup,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { apiRequest } from "../api/client";
+
+const DEFAULT_CENTER = [26.2183, 78.1828];
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
+
+function getDistanceInMeters(first, second) {
+  const earthRadius = 6371000;
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const latitudeDelta = toRadians(second.latitude - first.latitude);
+  const longitudeDelta = toRadians(second.longitude - first.longitude);
+  const firstLatitude = toRadians(first.latitude);
+  const secondLatitude = toRadians(second.latitude);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(firstLatitude) *
+      Math.cos(secondLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadius * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+function LocationMarker({ position, onPositionChange }) {
+  const markerRef = useRef(null);
+  const map = useMap();
+
+  useEffect(() => {
+    if (position) {
+      map.setView(position, Math.max(map.getZoom(), 15), { animate: true });
+    }
+  }, [map, position]);
+
+  useMapEvents({
+    click(event) {
+      onPositionChange(event.latlng.lat, event.latlng.lng);
+    },
+  });
+
+  const handleDragEnd = () => {
+    const marker = markerRef.current;
+    if (!marker) return;
+    const point = marker.getLatLng();
+    onPositionChange(point.lat, point.lng);
+  };
+
+  if (!position) return null;
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={position}
+      draggable
+      eventHandlers={{ dragend: handleDragEnd }}
+    >
+      <Popup>Selected waste location. Drag the pin to adjust.</Popup>
+    </Marker>
+  );
+}
 
 export default function ReportWaste() {
   const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [preview, setPreview] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
-  const [detectedAddress, setDetectedAddress] = useState("Detecting your device location...");
+  const [detectedAddress, setDetectedAddress] = useState("Waiting for location.");
+  const [locationNotice, setLocationNotice] = useState(
+    "Requesting device location. You can also select a point on the map.",
+  );
   const [gpsLoading, setGpsLoading] = useState(true);
+  const [gpsAnchor, setGpsAnchor] = useState(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
+  const [locationSource, setLocationSource] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
   const [remarks, setRemarks] = useState("");
+  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const geocodeSequence = useRef(0);
 
-  const fetchReadableAddress = async (lat, lng) => {
-    try {
-      const res = await fetch(
-        `https://openstreetmap.org{lat}&lon=${lng}`
-      );
-      const data = await res.json();
-      if (data?.display_name) {
-        setDetectedAddress(data.display_name);
-      } else {
-        setDetectedAddress(`Coordinates: ${lat}, ${lng}`);
-      }
-    } catch {
-      setDetectedAddress(`Coordinates: ${lat}, ${lng}`);
+  const position = useMemo(() => {
+    if (!latitude || !longitude) return null;
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return [lat, lng];
+  }, [latitude, longitude]);
+
+  const hasValidLocation =
+    position !== null &&
+    position[0] >= -90 &&
+    position[0] <= 90 &&
+    position[1] >= -180 &&
+    position[1] <= 180 &&
+    !(position[0] === 0 && position[1] === 0);
+
+  const locationConfidence = useMemo(() => {
+    if (!position || !gpsAnchor || !Number.isFinite(gpsAccuracy) || gpsAccuracy <= 0) {
+      return 0;
     }
-  };
+    const distance = getDistanceInMeters(
+      gpsAnchor,
+      { latitude: position[0], longitude: position[1] },
+    );
+    return Math.max(0, Math.min(100, Math.round((1 - distance / gpsAccuracy) * 100)));
+  }, [gpsAccuracy, gpsAnchor, position]);
 
-  const detectDeviceLocation = () => {
+  const fetchReadableAddress = useCallback(async (lat, lng) => {
+    const requestId = geocodeSequence.current + 1;
+    geocodeSequence.current = requestId;
+    setGeocoding(true);
+    setDetectedAddress("Looking up the selected location...");
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(
+          lat,
+        )}&lon=${encodeURIComponent(lng)}`,
+        { headers: { "Accept-Language": "en" } },
+      );
+      if (!response.ok) {
+        throw new Error(`Address lookup failed with status ${response.status}.`);
+      }
+      const data = await response.json();
+      if (requestId !== geocodeSequence.current) return;
+      setDetectedAddress(
+        data?.display_name || "No street address found; the GPS coordinates will be used.",
+      );
+    } catch {
+      if (requestId === geocodeSequence.current) {
+        setDetectedAddress(
+          "Address lookup is unavailable; the selected GPS coordinates will be used.",
+        );
+      }
+    } finally {
+      if (requestId === geocodeSequence.current) setGeocoding(false);
+    }
+  }, []);
+
+  const detectDeviceLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setGpsLoading(false);
-      setError("Your browser does not support automatic location detection.");
+      setLocationNotice(
+        "Automatic location is unavailable in this browser. Click the map or drag the pin to set a location.",
+      );
       return;
     }
 
     setGpsLoading(true);
-    setDetectedAddress("Detecting your exact device location...");
-
+    setLocationNotice("Detecting device GPS. You can still select a point on the map.");
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude.toFixed(6);
-        const lng = pos.coords.longitude.toFixed(6);
-        setLatitude(lat);
-        setLongitude(lng);
+      (location) => {
+        const lat = location.coords.latitude;
+        const lng = location.coords.longitude;
+        const anchor = { latitude: lat, longitude: lng };
+        setLatitude(lat.toFixed(6));
+        setLongitude(lng.toFixed(6));
+        setGpsAnchor(anchor);
+        setGpsAccuracy(location.coords.accuracy);
+        setLocationSource("gps");
         setGpsLoading(false);
+        setLocationNotice(
+          `Device GPS detected with reported accuracy of about ${Math.round(
+            location.coords.accuracy,
+          )} m. Drag the pin to fine-tune the location.`,
+        );
         setError("");
+        setResult(null);
         fetchReadableAddress(lat, lng);
       },
-      (err) => {
+      (locationError) => {
         setGpsLoading(false);
-        if (err.code === 1) {
-          setError("Location permission was blocked. Click the lock icon in your browser address bar and set Location to Allow.");
+        if (locationError.code === 1) {
+          setLocationNotice(
+            "Location permission was denied. Allow location access in your browser settings, or click the map to pin the site manually.",
+          );
         } else {
-          setError("Could not lock onto device GPS. Turn on Windows/Phone Location Services and tap Refresh.");
+          setLocationNotice(
+            "Could not detect device GPS. Click the map to select the location manually or try again.",
+          );
         }
-        setDetectedAddress("Location not detected yet");
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
     );
-  };
+  }, [fetchReadableAddress]);
 
   useEffect(() => {
-    detectDeviceLocation();
-  }, []);
+    const detectionTimer = window.setTimeout(detectDeviceLocation, 0);
+    return () => window.clearTimeout(detectionTimer);
+  }, [detectDeviceLocation]);
 
-  const handleFileChange = (e) => {
-    const selected = e.target.files && e.target.files[0];
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
+
+  const handlePositionChange = (lat, lng) => {
+    const nextLatitude = lat.toFixed(6);
+    const nextLongitude = lng.toFixed(6);
+    setLatitude(nextLatitude);
+    setLongitude(nextLongitude);
+    setLocationSource("manual");
+    setLocationNotice(
+      gpsAnchor
+        ? "Pin adjusted manually. The percentage below compares it with your device GPS accuracy radius."
+        : "Location selected manually. Drag the pin to fine-tune the exact spot.",
+    );
+    setResult(null);
+    setError("");
+    fetchReadableAddress(nextLatitude, nextLongitude);
+  };
+
+  const handleFileChange = (event) => {
+    const selected = event.target.files?.[0];
     if (!selected) return;
     setFile(selected);
     setPreview(URL.createObjectURL(selected));
@@ -75,138 +249,324 @@ export default function ReportWaste() {
     setError("");
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     if (!file) {
       setError("Please take or upload a photo of the garbage first.");
       return;
     }
-    if (!latitude || !longitude) {
-      setError("Please allow device location access before submitting.");
+    if (!hasValidLocation) {
+      setError("Select a valid GPS location before submitting your report.");
       return;
     }
 
     setLoading(true);
     setError("");
     setResult(null);
-
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("latitude", parseFloat(latitude));
-      formData.append("longitude", parseFloat(longitude));
-      formData.append("remarks", remarks || detectedAddress);
+      formData.append("latitude", String(position[0]));
+      formData.append("longitude", String(position[1]));
+      formData.append("remarks", remarks);
+      formData.append("description", description);
 
       const created = await apiRequest("/api/reports", {
         method: "POST",
         body: formData,
       });
-
       setResult(created);
-    } catch (err) {
-      setError(err.message);
+    } catch (requestError) {
+      setError(requestError.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const stepItems = [
+    {
+      title: "Image Upload",
+      description: file ? file.name : "Choose a photo of the waste.",
+      Icon: FileImage,
+      complete: Boolean(file),
+      active: !file,
+    },
+    {
+      title: "AI Waste Classification",
+      description: result
+        ? `Classified as ${result.category?.label || "waste"}.`
+        : loading
+          ? "Analyzing the uploaded image..."
+          : "AI classification runs when you submit.",
+      Icon: Sparkles,
+      complete: Boolean(result),
+      active: loading,
+    },
+    {
+      title: "Geocoding Verification Agent",
+      description: hasValidLocation
+        ? `${detectedAddress} GPS confidence match: ${locationConfidence}%.`
+        : "Detect GPS or click the map to verify a location.",
+      Icon: MapPinned,
+      complete: hasValidLocation && !geocoding,
+      active: geocoding,
+    },
+    {
+      title: "Submit Report",
+      description: result
+        ? "Report submitted successfully."
+        : "Submission unlocks when an image and valid location are selected.",
+      Icon: Send,
+      complete: Boolean(result),
+      active: Boolean(file && hasValidLocation && !result),
+    },
+  ];
+
   return (
-    <div className="max-w-xl mx-auto py-4 space-y-6">
-      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
-        <h1 className="text-2xl font-bold text-[#0B4650]">Report Garbage</h1>
-        <p className="text-sm text-gray-500 mt-1 mb-6">
-          Snap a photo—your device location and waste type are detected automatically.
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
+      <header>
+        <p className="text-sm font-semibold uppercase tracking-wider text-[#159B43]">
+          Citizen Dashboard
         </p>
+        <h1 className="mt-1 text-3xl font-bold text-[#0B4650]">Report Waste</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Add a photo, verify the location on the map, and submit a report for cleanup.
+        </p>
+      </header>
 
-        {error && (
-          <div role="alert" className="bg-red-50 text-red-700 text-xs p-3.5 rounded-xl mb-4 border border-red-200">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700"
+        >
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+      <section className="rounded-2xl border border-[#0B4650]/10 bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-[#159B43]" />
+          <h2 className="text-lg font-bold text-[#0B4650]">
+            Processing &amp; Geocoding Verification
+          </h2>
+        </div>
+        <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {stepItems.map(({ title, description: stepDescription, Icon, complete, active }, index) => (
+            <li
+              key={title}
+              className={`rounded-xl border p-4 ${
+                complete
+                  ? "border-[#159B43]/30 bg-[#EAF5EE]"
+                  : active
+                    ? "border-[#0B4650]/30 bg-[#F4F7F6]"
+                    : "border-gray-200 bg-gray-50"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                    complete
+                      ? "bg-[#159B43] text-white"
+                      : "bg-[#0B4650]/10 text-[#0B4650]"
+                  }`}
+                >
+                  {complete ? (
+                    <Check className="h-4 w-4" />
+                  ) : active && loading ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Icon className="h-4 w-4" />
+                  )}
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Step {index + 1}
+                </span>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[#0B4650]">{title}</h3>
+              <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-gray-600">
+                {stepDescription}
+              </p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-2">
+        <section className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              1. Capture or Upload Garbage Photo
+            <label
+              htmlFor="waste-photo"
+              className="mb-2 block text-sm font-semibold text-gray-800"
+            >
+              Waste Photo
             </label>
             <input
+              id="waste-photo"
               type="file"
               accept="image/*"
               capture="environment"
+              required={!file}
               onChange={handleFileChange}
-              className="w-full text-sm border border-gray-300 rounded-xl p-2.5 bg-gray-50"
+              className="w-full rounded-xl border border-gray-300 bg-gray-50 p-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-[#EAF5EE] file:px-3 file:py-2 file:font-semibold file:text-[#0B4650]"
             />
             {preview && (
               <img
                 src={preview}
-                alt="Waste preview"
-                className="mt-3 h-52 w-full object-cover rounded-xl border"
+                alt="Selected waste"
+                className="mt-3 h-56 w-full rounded-xl border border-gray-200 object-cover"
               />
             )}
           </div>
 
-          <div className="p-4 rounded-xl bg-[#F4F7F6] border border-gray-200 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#0B4650]">
-                📍 Automatic Device Location
-              </span>
-              <button
-                type="button"
-                onClick={detectDeviceLocation}
-                disabled={gpsLoading}
-                className="text-xs bg-white border border-gray-300 text-[#0B4650] font-semibold px-3 py-1 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              >
-                {gpsLoading ? "Detecting..." : "Refresh Location"}
-              </button>
+          <div>
+            <label
+              htmlFor="report-description"
+              className="mb-2 block text-sm font-semibold text-gray-800"
+            >
+              Description
+            </label>
+            <textarea
+              id="report-description"
+              rows={3}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Describe the waste or cleanup needed."
+              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-[#159B43] focus:ring-2 focus:ring-[#159B43]/20"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="report-remarks"
+              className="mb-2 block text-sm font-semibold text-gray-800"
+            >
+              Nearby Landmark or Remarks
+            </label>
+            <input
+              id="report-remarks"
+              type="text"
+              value={remarks}
+              onChange={(event) => setRemarks(event.target.value)}
+              placeholder="For example, near the bus stand"
+              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-[#159B43] focus:ring-2 focus:ring-[#159B43]/20"
+            />
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-bold text-[#0B4650]">
+                <MapPin className="h-5 w-5 text-[#159B43]" />
+                Verify Location
+              </h2>
+              <p className="mt-1 text-xs text-gray-500">
+                Drag the pin or click the map to mark the exact waste location.
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={detectDeviceLocation}
+              disabled={gpsLoading}
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-[#0B4650]/20 px-3 py-2 text-xs font-semibold text-[#0B4650] transition hover:bg-[#EAF5EE] disabled:cursor-wait disabled:opacity-60"
+            >
+              {gpsLoading ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <LocateFixed className="h-4 w-4" />
+              )}
+              Detect Current Location
+            </button>
+          </div>
 
-            <p className="text-sm font-medium text-gray-800 leading-snug">
-              {detectedAddress}
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            <MapContainer
+              center={DEFAULT_CENTER}
+              zoom={position ? 15 : 12}
+              scrollWheelZoom
+              className="h-72 w-full"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <LocationMarker
+                position={position}
+                onPositionChange={handlePositionChange}
+              />
+            </MapContainer>
+          </div>
+
+          <p
+            role="status"
+            className={`text-xs leading-relaxed ${
+              locationSource === "gps" ? "text-[#0B4650]" : "text-amber-800"
+            }`}
+          >
+            {locationNotice}
+          </p>
+
+          <div className="rounded-xl bg-[#F4F7F6] p-3">
+            <p className="text-sm font-semibold text-gray-800">
+              {geocoding ? "Verifying address..." : detectedAddress}
             </p>
-
-            {latitude && longitude && (
-              <p className="text-xs text-gray-500">
-                GPS Coordinates: <span className="font-mono font-semibold">{latitude}, {longitude}</span>
+            {hasValidLocation ? (
+              <>
+                <p className="mt-2 font-mono text-xs text-gray-600">
+                  {position[0].toFixed(6)}, {position[1].toFixed(6)}
+                </p>
+                <p className="mt-2 text-xs font-semibold text-[#0B4650]">
+                  GPS confidence match: {locationConfidence}%
+                  {gpsAccuracy ? ` (device accuracy radius: ±${Math.round(gpsAccuracy)} m)` : ""}
+                </p>
+              </>
+            ) : (
+              <p className="mt-1 text-xs text-red-700">
+                A valid location is required. Select a point on the map to continue.
               </p>
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              2. Nearby Landmark (Optional)
-            </label>
-            <input
-              type="text"
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              placeholder="e.g., Near bus stand, behind vegetable market"
-              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm"
-            />
-          </div>
-
           <button
             type="submit"
-            disabled={loading || gpsLoading}
-            className="w-full bg-[#159B43] hover:bg-[#118037] text-white font-semibold py-3 rounded-xl text-sm shadow-sm disabled:opacity-50"
+            disabled={loading || !file || !hasValidLocation}
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#159B43] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#118037] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Analyzing Waste & Submitting..." : "Submit Report"}
+            {loading ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {loading ? "Classifying and submitting..." : "Submit Report"}
           </button>
-        </form>
+        </section>
+      </form>
 
-        {result && (
-          <div className="mt-6 p-5 rounded-2xl bg-[#EAF5EE] border border-[#159B43]/30 space-y-1.5">
-            <p className="text-xs font-bold uppercase tracking-wider text-[#159B43]">
-              ✅ Report #{result.id} Sent to Nagar Nigam
-            </p>
-            <p className="text-lg font-extrabold text-[#0B4650]">
-              Detected Waste: {result.category?.label} ({(result.confidence * 100).toFixed(1)}%)
-            </p>
-            <p className="text-xs text-gray-600">
-              Location Saved: {result.latitude}, {result.longitude}
-            </p>
+      {result && (
+        <section
+          role="status"
+          className="rounded-2xl border border-[#159B43]/30 bg-[#EAF5EE] p-5"
+        >
+          <div className="flex items-start gap-3">
+            <Check className="mt-0.5 h-5 w-5 shrink-0 text-[#159B43]" />
+            <div>
+              <h2 className="font-bold text-[#0B4650]">
+                Report {result.reference_id || `C2C-${String(result.id).padStart(3, "0")}`} submitted
+              </h2>
+              <p className="mt-1 text-sm text-gray-700">
+                AI classification: {result.category?.label || "Complete"}
+                {typeof result.confidence === "number"
+                  ? ` (${(result.confidence * 100).toFixed(1)}% confidence)`
+                  : ""}
+              </p>
+              <p className="mt-1 text-xs text-gray-600">
+                Location saved: {result.latitude}, {result.longitude}
+              </p>
+            </div>
           </div>
-        )}
-      </div>
+        </section>
+      )}
     </div>
   );
 }

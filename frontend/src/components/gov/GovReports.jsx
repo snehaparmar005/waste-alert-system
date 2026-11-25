@@ -47,7 +47,7 @@ export default function GovReports() {
             className="border rounded-lg px-3 py-2 text-sm bg-white min-h-[44px]"
           >
             <option value="all">All Statuses</option>
-            <option value="reported">Reported / Pending</option>
+            <option value="submitted">Submitted / Pending</option>
             <option value="assigned">Assigned</option>
             <option value="cleaned">Cleaned</option>
           </select>

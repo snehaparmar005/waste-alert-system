@@ -62,7 +62,7 @@ export default function AdminReports() {
                     onChange={(e) => handleStatus(r.id, e.target.value)}
                     className="border rounded px-2 py-1 text-xs bg-white min-h-[36px]"
                   >
-                    <option value="reported">reported</option>
+                    <option value="submitted">submitted</option>
                     <option value="assigned">assigned</option>
                     <option value="cleaned">cleaned</option>
                   </select>
