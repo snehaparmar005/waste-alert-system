@@ -253,6 +253,13 @@ class WorkerCreateSchema(BaseModel):
     organisation: Optional[str] = None
 
 
+class WorkerUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    organisation: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Startup: seed users + ensure tables/columns
 # ---------------------------------------------------------------------------
@@ -279,6 +286,7 @@ def seed_users() -> None:
                 "ALTER TABLE users ADD COLUMN organisation VARCHAR(120) NULL",
                 "ALTER TABLE users ADD COLUMN nagar_nigam_id INT NULL",
                 "ALTER TABLE reports ADD COLUMN reference_id VARCHAR(20) UNIQUE",
+                "ALTER TABLE reports ADD COLUMN IF NOT EXISTS assigned_worker_id INT NULL",
                 "ALTER TABLE reports ADD COLUMN assigned_worker_id INT NULL",
                 "ALTER TABLE reports ADD COLUMN description TEXT",
             ]
@@ -592,6 +600,7 @@ def format_row(row: dict) -> dict:
         "status": status,
         "reference_id": f"C2C-{int(row['id']):03d}",
         "assigned_worker_id": row.get("assigned_worker_id"),
+        "assigned_worker_name": row.get("assigned_worker_name"),
         "description": row.get("description", ""),
         "created_at": created_at.isoformat()
         if hasattr(created_at, "isoformat")
@@ -695,8 +704,9 @@ async def create_report(
             )
 
             cur.execute(
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             row = cur.fetchone()
@@ -717,8 +727,9 @@ def get_reports(user: dict = Depends(get_current_user)) -> list:
     try:
         with conn.cursor() as cur:
             query = (
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id"
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id"
             )
             if user["role"] == "citizen":
                 query += " WHERE r.user_id = %s ORDER BY r.id DESC"
@@ -741,8 +752,9 @@ def get_report(report_id: int, user: dict = Depends(get_current_user)) -> dict:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             row = cur.fetchone()
@@ -774,8 +786,9 @@ def patch_report(
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             existing = cur.fetchone()
@@ -831,9 +844,36 @@ def patch_report(
                         detail="The GPS location cannot be (0, 0).",
                     )
 
+            assigned_worker_id = updates.get("assigned_worker_id")
+            if assigned_worker_id is not None:
+                if user["role"] not in ("gov", "admin"):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Only officers and administrators can assign workers.",
+                    )
+                cur.execute(
+                    "SELECT id, nagar_nigam_id FROM users "
+                    "WHERE id = %s AND role = 'worker'",
+                    (assigned_worker_id,),
+                )
+                worker = cur.fetchone()
+                if not worker:
+                    raise HTTPException(status_code=400, detail="Selected worker was not found.")
+                if (
+                    user["role"] == "gov"
+                    and worker["nagar_nigam_id"] != user["id"]
+                ):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You can only assign workers under your Nagar Nigam.",
+                    )
+                updates["status"] = "assigned"
+
             new_status = updates.get("status")
             # When assigning, require assigned_worker_id
-            if new_status == "assigned" and not updates.get("assigned_worker_id"):
+            if new_status == "assigned" and not updates.get(
+                "assigned_worker_id", existing.get("assigned_worker_id")
+            ):
                 raise HTTPException(
                     status_code=400,
                     detail="assigned_worker_id is required when setting status to 'assigned'.",
@@ -846,8 +886,9 @@ def patch_report(
                         (value, report_id),
                     )
             cur.execute(
-                "SELECT r.*, u.name AS user_name FROM reports r "
-                "JOIN users u ON r.user_id = u.id WHERE r.id = %s",
+                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "FROM reports r JOIN users u ON r.user_id = u.id "
+                "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             row = cur.fetchone()
@@ -953,6 +994,83 @@ def create_worker(
             ip=request.client.host if request and request.client else None,
         )
         return worker
+    finally:
+        conn.close()
+
+
+@app.put("/api/workers/{worker_id}")
+def update_worker(
+    worker_id: int,
+    payload: WorkerUpdateSchema,
+    user: dict = Depends(require_role("gov", "admin")),
+    request: Request = None,
+) -> dict:
+    provided = payload.dict(exclude_unset=True)
+    if not provided:
+        raise HTTPException(status_code=400, detail="At least one field must be provided.")
+
+    updates = {}
+    if "name" in provided:
+        name = (provided["name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Worker name cannot be empty.")
+        updates["name"] = name
+    if "email" in provided:
+        email = (provided["email"] or "").strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail="Worker email cannot be empty.")
+        updates["email"] = email
+    for field in ("phone", "organisation"):
+        if field in provided:
+            value = provided[field]
+            updates[field] = value.strip() if value else None
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, nagar_nigam_id FROM users WHERE id = %s AND role = 'worker'",
+                (worker_id,),
+            )
+            worker = cur.fetchone()
+            if not worker:
+                raise HTTPException(status_code=404, detail="Worker not found.")
+            if (
+                user["role"] == "gov"
+                and worker["nagar_nigam_id"] != user["id"]
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only manage your own workers.",
+                )
+            if "email" in updates:
+                cur.execute(
+                    "SELECT id FROM users WHERE email = %s AND id <> %s",
+                    (updates["email"], worker_id),
+                )
+                if cur.fetchone():
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Email is already registered.",
+                    )
+
+            columns = ", ".join(f"{field} = %s" for field in updates)
+            cur.execute(
+                f"UPDATE users SET {columns} WHERE id = %s",
+                (*updates.values(), worker_id),
+            )
+            cur.execute(
+                "SELECT id, name, email, role, phone, organisation, nagar_nigam_id "
+                "FROM users WHERE id = %s",
+                (worker_id,),
+            )
+            updated_worker = cur.fetchone()
+        conn.commit()
+        log_audit(
+            user["id"], user["name"], "update_worker", "user", worker_id,
+            ip=request.client.host if request and request.client else None,
+        )
+        return updated_worker
     finally:
         conn.close()
 
