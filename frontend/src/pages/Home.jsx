@@ -63,6 +63,7 @@ function Index() {
             {C.nav.map((n) => <li key={n.href}><a data-nav href={n.href} className="flex min-h-11 items-center rounded-full px-3 text-base font-medium text-ink hover:bg-tint">{n.label}</a></li>)}
           </ul>
           <div className="hidden gap-2 lg:flex">
+            <Link to="/login" className={`${outline} py-2`}>Portal Login</Link>
             <Link to={C.links.admin} className={`${outline} py-2`}>Admin Login</Link>
             <Link to={C.links.report} className={`${primary} py-2`}>Report Waste</Link>
           </div>
@@ -72,7 +73,7 @@ function Index() {
         </nav>
         {open && <div className="border-t border-border bg-background px-4 pb-4 lg:hidden">
             {C.nav.map((n) => <a data-nav key={n.href} href={n.href} onClick={() => setOpen(false)} className="block py-3 font-medium text-ink">{n.label}</a>)}
-            <div className="mt-2 grid gap-2"><Link to={C.links.report} className={primary}>Report Waste</Link><Link to={C.links.admin} className={outline}>Admin Login</Link></div>
+            <div className="mt-2 grid gap-2"><Link to={C.links.report} className={primary}>Report Waste</Link><Link to="/login" className={outline}>Portal Login</Link><Link to={C.links.admin} className={outline}>Admin Login</Link></div>
           </div>}
       </header>
 

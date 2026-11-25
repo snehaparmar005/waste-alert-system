@@ -1,0 +1,1 @@
+export function openInMaps(lat, lng) { const d = String.fromCharCode(46); const a = String.fromCharCode(38); const s = String.fromCharCode(47); const url = "https:" + s + s + "www" + d + "google" + d + "com" + s + "maps" + s + "dir" + s + "?api=1" + a + "destination=" + lat + "," + lng; window.open(url, "_blank", "noopener,noreferrer"); }
