@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
+import { Recycle } from "lucide-react";
 
 export default function Navbar({ role, onLogout }) {
   const navigate = useNavigate();
@@ -11,7 +12,8 @@ export default function Navbar({ role, onLogout }) {
   return (
     <nav className="bg-emerald-700 text-white px-6 py-4 shadow-md flex justify-between items-center">
       <Link to="/" className="text-xl font-bold tracking-wide flex items-center gap-2">
-        ♻️ Click-2-Clean
+        <Recycle className="h-5 w-5" aria-hidden="true" />
+        Click-2-Clean
       </Link>
 
       <div className="flex items-center gap-5 text-sm font-medium">

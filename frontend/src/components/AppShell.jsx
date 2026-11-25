@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Bell,
   Camera,
+  CheckCheck,
   CheckSquare,
   ChevronDown,
   ClipboardList,
@@ -18,6 +19,17 @@ import {
   X,
 } from "lucide-react";
 import { apiRequest, clearSession } from "../api/client";
+
+function formatNotificationTimestamp(value) {
+  if (!value) return "";
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime())
+    ? ""
+    : timestamp.toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+}
 
 function BrandLogo({ className = "h-10 w-10" }) {
   return (
@@ -97,19 +109,43 @@ const navItemsByRole = {
 export default function AppShell({ user, onLogout, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationError, setNotificationError] = useState("");
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const dropdownRef = useRef(null);
+  const notificationRef = useRef(null);
   const navigate = useNavigate();
   const role = user?.role;
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      const data = await apiRequest("/api/notifications");
+      setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+      setUnreadCount(Number(data.unread_count) || 0);
+      setNotificationError("");
+    } catch (error) {
+      setNotificationError(error.message || "Could not load notifications.");
+    }
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setProfileMenuOpen(false);
       }
+      if (
+        notificationRef.current &&
+        !notificationRef.current.contains(event.target)
+      ) {
+        setNotificationsOpen(false);
+      }
     };
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         setProfileMenuOpen(false);
+        setNotificationsOpen(false);
         setSidebarOpen(false);
       }
     };
@@ -122,6 +158,35 @@ export default function AppShell({ user, onLogout, children }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!role) return undefined;
+    const initialFetch = window.setTimeout(loadNotifications, 0);
+    const pollingInterval = window.setInterval(loadNotifications, 20000);
+    return () => {
+      window.clearTimeout(initialFetch);
+      window.clearInterval(pollingInterval);
+    };
+  }, [loadNotifications, role]);
+
+  const handleMarkAllRead = async () => {
+    setMarkingAllRead(true);
+    setNotificationError("");
+    try {
+      await apiRequest("/api/notifications/read-all", { method: "PATCH" });
+      setNotifications((currentNotifications) =>
+        currentNotifications.map((notification) => ({
+          ...notification,
+          is_read: true,
+        })),
+      );
+      setUnreadCount(0);
+    } catch (error) {
+      setNotificationError(error.message || "Could not mark notifications as read.");
+    } finally {
+      setMarkingAllRead(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await apiRequest("/api/logout", { method: "POST" });
@@ -131,6 +196,7 @@ export default function AppShell({ user, onLogout, children }) {
     clearSession();
     onLogout();
     setProfileMenuOpen(false);
+    setNotificationsOpen(false);
     navigate("/login");
   };
 
@@ -273,14 +339,97 @@ export default function AppShell({ user, onLogout, children }) {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate(role === "admin" ? "/admin/alerts" : "/profile")}
-              aria-label="Notifications"
-              className="relative rounded-xl border border-gray-200 p-2 text-gray-600 transition hover:bg-gray-50"
-            >
-              <Bell className="h-5 w-5" />
-            </button>
+            <div className="relative" ref={notificationRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setNotificationsOpen((isOpen) => !isOpen);
+                  loadNotifications();
+                }}
+                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
+                aria-expanded={notificationsOpen}
+                aria-controls="navbar-notifications"
+                className="relative rounded-xl border border-gray-200 p-2 text-gray-600 transition hover:bg-gray-50"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-amber-300">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <section
+                  id="navbar-notifications"
+                  aria-label="Recent notifications"
+                  className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-white text-gray-800 shadow-xl sm:w-96"
+                >
+                  <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-[#0B4650]">Notifications</h2>
+                      <p className="text-xs text-gray-500">
+                        {unreadCount} unread
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      disabled={unreadCount === 0 || markingAllRead}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#0B4650] transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <CheckCheck className="h-4 w-4 text-[#159B43]" />
+                      Mark all as read
+                    </button>
+                  </div>
+
+                  {notificationError && (
+                    <p role="alert" className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">
+                      {notificationError}
+                    </p>
+                  )}
+
+                  <div className="max-h-96 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <p className="px-4 py-8 text-center text-sm text-gray-500">
+                        No notifications yet.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-gray-100">
+                        {notifications.map((notification) => (
+                          <li
+                            key={notification.id}
+                            className={`flex gap-3 px-4 py-3 ${
+                              notification.is_read ? "bg-white" : "bg-emerald-50/60"
+                            }`}
+                          >
+                            <span
+                              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                notification.is_read ? "bg-gray-300" : "bg-[#159B43]"
+                              }`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-[#0B4650]">
+                                {notification.title || "Notification"}
+                              </p>
+                              <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-gray-600">
+                                {notification.message}
+                              </p>
+                              <time
+                                dateTime={notification.created_at || undefined}
+                                className="mt-1 block text-[11px] text-gray-400"
+                              >
+                                {formatNotificationTimestamp(notification.created_at)}
+                              </time>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
 
             <div className="relative" ref={dropdownRef}>
               <button

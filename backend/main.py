@@ -201,18 +201,16 @@ def log_audit(
         conn.close()
 
 
-def create_notification(user_id, type, message, related_report_id=None):
+def create_notification(title, message, user_id=None, target_role=None):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO notifications (user_id, type, message, related_report_id) "
+                "INSERT INTO notifications (user_id, target_role, title, message) "
                 "VALUES (%s, %s, %s, %s)",
-                (user_id, type, message, related_report_id),
+                (user_id, target_role, title, message),
             )
         conn.commit()
-    except Exception:
-        pass
     finally:
         conn.close()
 
@@ -328,15 +326,36 @@ def seed_users() -> None:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS notifications (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id INT NOT NULL,
-                    type VARCHAR(50) NOT NULL,
-                    message TEXT NOT NULL,
-                    is_read BOOLEAN DEFAULT FALSE,
-                    related_report_id INT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    user_id INT NULL,
+                    target_role VARCHAR(32) NULL,
+                    title VARCHAR(160),
+                    message TEXT,
+                    is_read TINYINT(1) DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            cur.execute("SHOW COLUMNS FROM notifications")
+            notification_columns = {
+                column["Field"]: column for column in cur.fetchall()
+            }
+            if "target_role" not in notification_columns:
+                cur.execute(
+                    "ALTER TABLE notifications ADD COLUMN target_role VARCHAR(32) NULL"
+                )
+            if "title" not in notification_columns:
+                cur.execute(
+                    "ALTER TABLE notifications ADD COLUMN title VARCHAR(160) NULL"
+                )
+            if (
+                "user_id" in notification_columns
+                and notification_columns["user_id"]["Null"] == "NO"
+            ):
+                cur.execute("ALTER TABLE notifications MODIFY COLUMN user_id INT NULL")
+            if (
+                "type" in notification_columns
+                and notification_columns["type"]["Null"] == "NO"
+            ):
+                cur.execute("ALTER TABLE notifications MODIFY COLUMN type VARCHAR(50) NULL")
 
             # Ensure audit_logs table exists
             cur.execute("""
@@ -755,6 +774,13 @@ async def create_report(
             ip=request.client.host if request and request.client else None,
             user_role=user["role"],
         )
+        report_ward = ward or "Ward not specified"
+        for target_role in ("gov", "admin"):
+            create_notification(
+                title=f"New waste report: {reference_id}",
+                message=f"{reference_id} was submitted for {report_ward}.",
+                target_role=target_role,
+            )
         return format_row(row)
     finally:
         conn.close()
@@ -933,7 +959,20 @@ def patch_report(
             row = cur.fetchone()
         conn.commit()
 
-        # Audit every report mutation and notify on status changes.
+        existing_status = str(existing.get("status") or "").lower()
+        if existing_status == "reported":
+            existing_status = "submitted"
+        assigned_worker_id = updates.get(
+            "assigned_worker_id", existing.get("assigned_worker_id")
+        )
+        assignment_changed = (
+            "assigned_worker_id" in updates
+            and str(updates["assigned_worker_id"])
+            != str(existing.get("assigned_worker_id") or "")
+        )
+        status_changed = new_status is not None and new_status != existing_status
+
+        # Audit every report mutation and notify recipients for state changes.
         if updates:
             if new_status == "cleaned":
                 audit_action = "report_cleaned"
@@ -947,19 +986,19 @@ def patch_report(
                 ip=request.client.host if request and request.client else None,
                 user_role=user["role"],
             )
-        if new_status:
-            # Notify report owner
+        if new_status and (status_changed or assignment_changed):
+            reference_id = existing.get("reference_id") or f"C2C-{report_id:03d}"
+            status_label = new_status.replace("_", " ").title()
             create_notification(
-                existing["user_id"], "status_change",
-                f"Your report #{report_id} status changed to {new_status}.",
-                related_report_id=report_id,
+                title=f"{reference_id} status updated",
+                message=f"Your report {reference_id} is now {status_label}.",
+                user_id=existing["user_id"],
             )
-            # Notify assigned worker
-            if new_status == "assigned" and updates.get("assigned_worker_id"):
+            if assigned_worker_id:
                 create_notification(
-                    updates["assigned_worker_id"], "assignment",
-                    f"You have been assigned to report #{report_id}.",
-                    related_report_id=report_id,
+                    title=f"{reference_id} task updated",
+                    message=f"Report {reference_id} is now {status_label}.",
+                    user_id=assigned_worker_id,
                 )
 
         return format_row(row)
@@ -1158,19 +1197,50 @@ def delete_worker(
 # ---------------------------------------------------------------------------
 
 @app.get("/api/notifications")
-def get_notifications(user: dict = Depends(get_current_user)) -> list:
+def get_notifications(user: dict = Depends(get_current_user)) -> dict:
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT * FROM notifications WHERE user_id = %s ORDER BY created_at DESC",
-                (user["id"],),
+                "SELECT id, user_id, target_role, title, message, is_read, created_at "
+                "FROM notifications WHERE user_id = %s OR target_role = %s "
+                "ORDER BY id DESC LIMIT 20",
+                (user["id"], user["role"]),
             )
             rows = cur.fetchall()
+            cur.execute(
+                "SELECT COUNT(*) AS unread_count FROM notifications "
+                "WHERE (user_id = %s OR target_role = %s) AND is_read = 0",
+                (user["id"], user["role"]),
+            )
+            unread_row = cur.fetchone()
             for row in rows:
+                row["title"] = row.get("title") or "Notification"
+                row["message"] = row.get("message") or ""
+                row["is_read"] = bool(row.get("is_read"))
                 if hasattr(row.get("created_at"), "isoformat"):
                     row["created_at"] = row["created_at"].isoformat()
-            return rows
+            return {
+                "notifications": rows,
+                "unread_count": int(unread_row["unread_count"]),
+            }
+    finally:
+        conn.close()
+
+
+@app.patch("/api/notifications/read-all")
+def mark_all_notifications_read(user: dict = Depends(get_current_user)) -> dict:
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE notifications SET is_read = 1 "
+                "WHERE (user_id = %s OR target_role = %s) AND is_read = 0",
+                (user["id"], user["role"]),
+            )
+            marked_count = cur.rowcount
+        conn.commit()
+        return {"marked_count": marked_count, "unread_count": 0}
     finally:
         conn.close()
 
@@ -1181,8 +1251,9 @@ def mark_notification_read(notification_id: int, user: dict = Depends(get_curren
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE notifications SET is_read = TRUE WHERE id = %s AND user_id = %s",
-                (notification_id, user["id"]),
+                "UPDATE notifications SET is_read = 1 "
+                "WHERE id = %s AND (user_id = %s OR target_role = %s)",
+                (notification_id, user["id"], user["role"]),
             )
             if cur.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Notification not found.")
