@@ -71,9 +71,6 @@ function Index() {
             {C.nav.map((n) => <li key={n.href}><a data-nav href={n.href} className="flex min-h-11 items-center rounded-full px-3 text-base font-medium text-ink hover:bg-tint">{n.label}</a></li>)}
           </ul>
           <div className="hidden items-center gap-2 lg:flex">
-            <Link to="/register" className="inline-flex min-h-10 items-center justify-center rounded-full border-2 border-ink bg-card px-4 py-1.5 text-sm font-bold text-ink transition hover:bg-tint">
-              Register
-            </Link>
             <Link to="/login" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border-2 border-[#159B43] bg-[#159B43] px-5 py-1.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#118037]">
               Portal Login
             </Link>
@@ -94,7 +91,6 @@ function Index() {
             <div className="mt-3 grid gap-2">
               <Link to={C.links.report} className={`${primary} py-2.5`}>Report Waste</Link>
               <Link to="/login" className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#159B43] px-6 py-2.5 font-bold text-white">Portal Login</Link>
-              <Link to="/register" className={`${outline} py-2.5`}>Register</Link>
               <Link to={C.links.admin} className={`${outline} py-2.5`}>Admin Login</Link>
             </div>
           </div>}
