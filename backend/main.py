@@ -292,7 +292,7 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 
 def require_role(*roles):
     def checker(user: dict = Depends(get_current_user)):
-        if user["role"] not in roles:
+        if str(user.get("role", "")).lower() not in roles:
             raise HTTPException(status_code=403, detail="Insufficient permissions.")
         return user
     return checker
@@ -1113,6 +1113,7 @@ def patch_report(
     request: Request = None,
 ) -> dict:
     updates = payload.dict(exclude_unset=True)
+    role = str(user.get("role", "")).lower()
     if not updates:
         raise HTTPException(status_code=400, detail="At least one field must be provided.")
     if "status" in updates and updates["status"] is not None:
@@ -1139,7 +1140,7 @@ def patch_report(
             if not existing:
                 raise HTTPException(status_code=404, detail="Report not found.")
 
-            if user["role"] == "citizen":
+            if role == "citizen":
                 citizen_editable_fields = {
                     "remarks",
                     "ward",
@@ -1163,6 +1164,14 @@ def patch_report(
                         status_code=403,
                         detail="Citizens may only edit report details while submitted.",
                     )
+            elif role == "worker":
+                if set(updates) - {"status"}:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Workers may only update report status.",
+                    )
+            elif role not in ("gov", "officer", "admin"):
+                raise HTTPException(status_code=403, detail="Insufficient permissions.")
 
             if "latitude" in updates or "longitude" in updates:
                 latitude = updates.get("latitude")
@@ -1190,7 +1199,7 @@ def patch_report(
 
             assigned_worker_id = updates.get("assigned_worker_id")
             if assigned_worker_id is not None:
-                if user["role"] not in ("gov", "admin"):
+                if role not in ("gov", "officer", "admin"):
                     raise HTTPException(
                         status_code=403,
                         detail="Only officers and administrators can assign workers.",
@@ -1204,7 +1213,7 @@ def patch_report(
                 if not worker:
                     raise HTTPException(status_code=400, detail="Selected worker was not found.")
                 if (
-                    user["role"] == "gov"
+                    role == "gov"
                     and worker["nagar_nigam_id"] != user["id"]
                 ):
                     raise HTTPException(
@@ -1310,11 +1319,11 @@ def delete_report(report_id: int, user: dict = Depends(get_current_user)) -> dic
 # ---------------------------------------------------------------------------
 
 @app.get("/api/workers")
-def list_workers(user: dict = Depends(require_role("gov", "admin"))) -> list:
+def list_workers(user: dict = Depends(require_role("gov", "officer", "admin"))) -> list:
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            if user["role"] == "gov":
+            if str(user.get("role", "")).lower() == "gov":
                 cur.execute(
                     "SELECT id, name, email, role, phone, organisation, nagar_nigam_id "
                     "FROM users WHERE role = 'worker' AND nagar_nigam_id = %s ORDER BY id ASC",
