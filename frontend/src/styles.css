@@ -231,6 +231,84 @@ h1,h2,h3 { font-family: var(--font-display); color: var(--ink); letter-spacing: 
 .anim-ring { animation: ring 1.6s ease-out .9s infinite; }
 .anim-bell { animation: wiggle 1.1s ease-in-out infinite; transform-origin: top center; }
 .anim-status { animation: statusCycle 6s linear infinite; }
+
+/* Portal theme harmonization — brings Citizen, Gov, Worker & Admin pages in line with the landing UI */
+.portal-theme {
+  font-family: var(--font-sans);
+  color: var(--body);
+}
+.portal-theme h1,
+.portal-theme h2,
+.portal-theme h3 {
+  font-family: var(--font-display);
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+.portal-theme .bg-white.rounded-2xl,
+.portal-theme .bg-white.rounded-3xl,
+.portal-theme .bg-white.rounded-xl {
+  background-color: var(--card);
+  border-color: var(--border);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-soft);
+}
+.portal-theme input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.portal-theme select,
+.portal-theme textarea {
+  border-color: color-mix(in oklab, var(--ink) 25%, transparent);
+  border-radius: 0.85rem;
+}
+.portal-theme input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+.portal-theme select:focus,
+.portal-theme textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 20%, transparent);
+}
+.portal-theme .bg-\[\#0B4650\],
+.portal-theme .bg-\[\#0F4C5C\] {
+  background-color: var(--ink);
+}
+.portal-theme .bg-\[\#159B43\],
+.portal-theme .bg-\[\#2E9E5B\] {
+  background-color: var(--primary);
+}
+.portal-theme .text-\[\#0B4650\],
+.portal-theme .text-\[\#0F4C5C\] {
+  color: var(--ink);
+}
+.portal-theme .text-\[\#159B43\],
+.portal-theme .text-\[\#2E9E5B\] {
+  color: var(--primary);
+}
+.portal-theme .bg-\[\#EAF5EE\] {
+  background-color: var(--tint);
+}
+.portal-theme thead.bg-\[\#F4F7F6\],
+.portal-theme thead.bg-gray-50 {
+  background-color: var(--tint);
+  color: var(--ink);
+}
+.portal-theme button[class*="bg-[#159B43]"],
+.portal-theme button[class*="bg-[#0B4650]"],
+.portal-theme button[class*="bg-[#0F4C5C]"],
+.portal-theme button[class*="bg-[#2E9E5B]"],
+.portal-theme a[class*="bg-[#159B43]"],
+.portal-theme a[class*="bg-[#0B4650]"] {
+  border-radius: 9999px;
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  transition: transform 0.2s ease;
+}
+.portal-theme button[class*="bg-[#159B43]"]:hover,
+.portal-theme button[class*="bg-[#0B4650]"]:hover,
+.portal-theme button[class*="bg-[#0F4C5C]"]:hover,
+.portal-theme button[class*="bg-[#2E9E5B]"]:hover,
+.portal-theme a[class*="bg-[#159B43]"]:hover,
+.portal-theme a[class*="bg-[#0B4650]"]:hover {
+  transform: translateY(-2px);
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .anim-wiggle,.anim-shake,.anim-pin,.anim-flash,.anim-scan,.anim-detect,.anim-ring,.anim-bell,.anim-status { animation: none; }
