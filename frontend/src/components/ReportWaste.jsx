@@ -325,11 +325,11 @@ export default function ReportWaste() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
       <header>
-        <p className="text-sm font-semibold uppercase tracking-wider text-[#159B43]">
+        <p className="text-xs font-bold uppercase tracking-wider text-teal-700">
           Citizen Dashboard
         </p>
-        <h1 className="mt-1 text-3xl font-bold text-[#0B4650]">Report Waste</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="mt-1 text-3xl font-extrabold text-slate-800">Report Waste</h1>
+        <p className="mt-1.5 text-sm text-slate-500">
           Add a photo, verify the location on the map, and submit a report for cleanup.
         </p>
       </header>
@@ -337,67 +337,105 @@ export default function ReportWaste() {
       {error && (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700"
+          className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50/90 p-4 text-sm text-rose-800"
         >
-          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
           {error}
         </div>
       )}
 
-      <section className="rounded-2xl border border-[#0B4650]/10 bg-white p-5 shadow-sm sm:p-6">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-sm backdrop-blur-sm sm:p-6">
         <div className="mb-4 flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-[#159B43]" />
-          <h2 className="text-lg font-bold text-[#0B4650]">
+          <Sparkles className="h-5 w-5 text-indigo-500" />
+          <h2 className="text-lg font-bold text-slate-800">
             Processing &amp; Geocoding Verification
           </h2>
         </div>
         <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {stepItems.map(({ title, description: stepDescription, Icon, complete, active }, index) => (
-            <li
-              key={title}
-              className={`rounded-xl border p-4 ${
-                complete
-                  ? "border-[#159B43]/30 bg-[#EAF5EE]"
-                  : active
-                    ? "border-[#0B4650]/30 bg-[#F4F7F6]"
-                    : "border-gray-200 bg-gray-50"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                    complete
-                      ? "bg-[#159B43] text-white"
-                      : "bg-[#0B4650]/10 text-[#0B4650]"
-                  }`}
-                >
-                  {complete ? (
-                    <Check className="h-4 w-4" />
-                  ) : active && loading ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Icon className="h-4 w-4" />
-                  )}
-                </span>
-                <span className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                  Step {index + 1}
-                </span>
-              </div>
-              <h3 className="mt-3 text-sm font-bold text-[#0B4650]">{title}</h3>
-              <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-gray-600">
-                {stepDescription}
-              </p>
-            </li>
-          ))}
+          {stepItems.map(({ title, description: stepDescription, Icon, complete, active }, index) => {
+            const stepStyles = [
+              // Step 1: Soft Blue
+              {
+                complete: "border-sky-300/80 bg-sky-50/70",
+                active: "border-sky-400 bg-sky-50/40",
+                iconComplete: "bg-sky-600 text-white",
+                iconDefault: "bg-sky-100 text-sky-700",
+              },
+              // Step 2: Lavender
+              {
+                complete: "border-indigo-300/80 bg-indigo-50/70",
+                active: "border-indigo-400 bg-indigo-50/40",
+                iconComplete: "bg-indigo-600 text-white",
+                iconDefault: "bg-indigo-100 text-indigo-700",
+              },
+              // Step 3: Dusty Pink
+              {
+                complete: "border-rose-300/80 bg-rose-50/70",
+                active: "border-rose-400 bg-rose-50/40",
+                iconComplete: "bg-rose-500 text-white",
+                iconDefault: "bg-rose-100 text-rose-700",
+              },
+              // Step 4: Muted Teal
+              {
+                complete: "border-teal-300/80 bg-teal-50/70",
+                active: "border-teal-400 bg-teal-50/40",
+                iconComplete: "bg-teal-700 text-white",
+                iconDefault: "bg-teal-100 text-teal-800",
+              },
+            ][index] || {
+              complete: "border-teal-300 bg-teal-50",
+              active: "border-slate-300 bg-slate-50",
+              iconComplete: "bg-teal-700 text-white",
+              iconDefault: "bg-teal-100 text-teal-800",
+            };
+
+            return (
+              <li
+                key={title}
+                className={`rounded-2xl border p-4 transition ${
+                  complete
+                    ? stepStyles.complete
+                    : active
+                      ? stepStyles.active
+                      : "border-slate-200 bg-slate-50/60"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
+                      complete
+                        ? stepStyles.iconComplete
+                        : stepStyles.iconDefault
+                    }`}
+                  >
+                    {complete ? (
+                      <Check className="h-4 w-4" />
+                    ) : active && loading ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Icon className="h-4 w-4" />
+                    )}
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Step {index + 1}
+                  </span>
+                </div>
+                <h3 className="mt-3 text-sm font-bold text-slate-800">{title}</h3>
+                <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-slate-600">
+                  {stepDescription}
+                </p>
+              </li>
+            );
+          })}
         </ol>
       </section>
 
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-2">
-        <section className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+        <section className="space-y-5 rounded-3xl border border-slate-200/90 bg-white/95 p-5 shadow-sm backdrop-blur-sm sm:p-6">
           <div>
             <label
               htmlFor="waste-photo"
-              className="mb-2 block text-sm font-semibold text-gray-800"
+              className="mb-2 block text-sm font-bold text-slate-800"
             >
               Waste Photo
             </label>
@@ -408,13 +446,13 @@ export default function ReportWaste() {
               capture="environment"
               required={!file}
               onChange={handleFileChange}
-              className="w-full rounded-xl border border-gray-300 bg-gray-50 p-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-[#EAF5EE] file:px-3 file:py-2 file:font-semibold file:text-[#0B4650]"
+              className="w-full rounded-2xl border border-slate-200 bg-gradient-to-r from-sky-50/50 via-purple-50/30 to-rose-50/30 p-2.5 text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-teal-700 file:px-3 file:py-2 file:font-semibold file:text-white"
             />
             {preview && (
               <img
                 src={preview}
                 alt="Selected waste"
-                className="mt-3 h-56 w-full rounded-xl border border-gray-200 object-cover"
+                className="mt-3 h-56 w-full rounded-2xl border border-slate-200 object-cover shadow-xs"
               />
             )}
           </div>
@@ -422,7 +460,7 @@ export default function ReportWaste() {
           <div>
             <label
               htmlFor="report-description"
-              className="mb-2 block text-sm font-semibold text-gray-800"
+              className="mb-2 block text-sm font-bold text-slate-800"
             >
               Description
             </label>
@@ -432,14 +470,14 @@ export default function ReportWaste() {
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Describe the waste or cleanup needed."
-              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-[#159B43] focus:ring-2 focus:ring-[#159B43]/20"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20"
             />
           </div>
 
           <div>
             <label
               htmlFor="report-remarks"
-              className="mb-2 block text-sm font-semibold text-gray-800"
+              className="mb-2 block text-sm font-bold text-slate-800"
             >
               Nearby Landmark or Remarks
             </label>
@@ -449,19 +487,19 @@ export default function ReportWaste() {
               value={remarks}
               onChange={(event) => setRemarks(event.target.value)}
               placeholder="For example, near the bus stand"
-              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-[#159B43] focus:ring-2 focus:ring-[#159B43]/20"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20"
             />
           </div>
         </section>
 
-        <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+        <section className="space-y-4 rounded-3xl border border-slate-200/90 bg-white/95 p-5 shadow-sm backdrop-blur-sm sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="flex items-center gap-2 text-lg font-bold text-[#0B4650]">
-                <MapPin className="h-5 w-5 text-[#159B43]" />
+              <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+                <MapPin className="h-5 w-5 text-teal-600" />
                 Verify Location
               </h2>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-slate-500">
                 Drag the pin or click the map to mark the exact waste location.
               </p>
             </div>
@@ -469,18 +507,18 @@ export default function ReportWaste() {
               type="button"
               onClick={detectDeviceLocation}
               disabled={gpsLoading}
-              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-[#0B4650]/20 px-3 py-2 text-xs font-semibold text-[#0B4650] transition hover:bg-[#EAF5EE] disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/70 px-3.5 py-2 text-xs font-semibold text-teal-800 transition hover:bg-teal-100 disabled:cursor-wait disabled:opacity-60"
             >
               {gpsLoading ? (
                 <LoaderCircle className="h-4 w-4 animate-spin" />
               ) : (
-                <LocateFixed className="h-4 w-4" />
+                <LocateFixed className="h-4 w-4 text-teal-700" />
               )}
               Detect Current Location
             </button>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-gray-200">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-xs">
             <MapContainer
               center={DEFAULT_CENTER}
               zoom={position ? 15 : 12}
@@ -501,28 +539,28 @@ export default function ReportWaste() {
           <p
             role="status"
             className={`text-xs leading-relaxed ${
-              locationSource === "gps" ? "text-[#0B4650]" : "text-amber-800"
+              locationSource === "gps" ? "text-teal-800" : "text-rose-700"
             }`}
           >
             {locationNotice}
           </p>
 
-          <div className="rounded-xl bg-[#F4F7F6] p-3">
-            <p className="text-sm font-semibold text-gray-800">
+          <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-r from-sky-50/60 via-purple-50/40 to-teal-50/50 p-3.5">
+            <p className="text-sm font-semibold text-slate-800">
               {geocoding ? "Verifying address..." : detectedAddress}
             </p>
             {hasValidLocation ? (
               <>
-                <p className="mt-2 font-mono text-xs text-gray-600">
+                <p className="mt-1.5 font-mono text-xs text-slate-500">
                   {position[0].toFixed(6)}, {position[1].toFixed(6)}
                 </p>
-                <p className="mt-2 text-xs font-semibold text-[#0B4650]">
+                <p className="mt-1.5 text-xs font-semibold text-teal-800">
                   GPS confidence match: {locationConfidence}%
                   {gpsAccuracy ? ` (device accuracy radius: ±${Math.round(gpsAccuracy)} m)` : ""}
                 </p>
               </>
             ) : (
-              <p className="mt-1 text-xs text-red-700">
+              <p className="mt-1 text-xs text-rose-700">
                 A valid location is required. Select a point on the map to continue.
               </p>
             )}
@@ -531,7 +569,7 @@ export default function ReportWaste() {
           <button
             type="submit"
             disabled={loading || !file || !hasValidLocation}
-            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#159B43] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#118037] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-teal-700 px-4 py-3 text-sm font-bold text-white shadow-md shadow-teal-900/15 transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? (
               <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -546,21 +584,21 @@ export default function ReportWaste() {
       {result && (
         <section
           role="status"
-          className="rounded-2xl border border-[#159B43]/30 bg-[#EAF5EE] p-5"
+          className="rounded-3xl border border-teal-300/80 bg-teal-50/80 p-5 shadow-xs"
         >
           <div className="flex items-start gap-3">
-            <Check className="mt-0.5 h-5 w-5 shrink-0 text-[#159B43]" />
+            <Check className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
             <div>
-              <h2 className="font-bold text-[#0B4650]">
+              <h2 className="font-bold text-slate-800">
                 Report {result.reference_id || `C2C-${String(result.id).padStart(3, "0")}`} submitted
               </h2>
-              <p className="mt-1 text-sm text-gray-700">
+              <p className="mt-1 text-sm text-slate-600">
                 AI classification: {result.category?.label || "Complete"}
                 {typeof result.confidence === "number"
                   ? ` (${(result.confidence * 100).toFixed(1)}% confidence)`
                   : ""}
               </p>
-              <p className="mt-1 text-xs text-gray-600">
+              <p className="mt-1 text-xs text-slate-500">
                 Location saved: {result.latitude}, {result.longitude}
               </p>
             </div>
