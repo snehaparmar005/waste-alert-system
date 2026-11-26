@@ -102,127 +102,103 @@ function Index() {
 
       <main>
         {
-          /* 1 HERO - REDESIGNED FROM REFERENCE IMAGE */
+          /* 1 HERO - FULL-WIDTH UNIFIED CITY BACKGROUND WITH SUBTLE OVERLAY */
         }
-        <section className="relative overflow-hidden bg-gradient-to-b from-[#F2FAF4] via-[#E8F6ED] to-white pb-16 pt-8 md:pb-24 md:pt-14">
-          {/* Subtle natural leaf/greenery decorative background highlights */}
-          <div className="pointer-events-none absolute -left-20 -top-20 h-96 w-96 rounded-full bg-emerald-200/40 blur-3xl" />
-          <div className="pointer-events-none absolute right-0 top-1/4 h-[32rem] w-[32rem] rounded-full bg-emerald-100/50 blur-3xl" />
+        <section className="relative min-h-[85vh] w-full overflow-hidden bg-emerald-950 py-16 md:py-24 flex items-center">
+          {/* Full-width realistic city background with hand scanning garbage, bin & greenery */}
+          <div className="absolute inset-0 z-0">
+            <img
+              src="/images/hero-reference.jpg"
+              alt="Realistic city street with greenery, recycling bin, trash bags and smartphone scanning garbage"
+              className="h-full w-full object-cover object-[75%_center] md:object-right"
+              loading="eager"
+            />
+            {/* Subtle natural white-to-green gradient overlay ensuring high contrast readability on left while revealing background on right */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/85 to-white/30 md:from-white/95 md:via-white/75 md:to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-white/70 via-transparent to-white/30 md:hidden" />
+          </div>
 
-          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-8">
+          <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-2xl lg:max-w-3xl">
               
-              {/* Left Column: Headlines & Content */}
-              <div className="flex flex-col items-start lg:col-span-7">
-                
-                {/* Academic Project Badge / Subtitle */}
-                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/80 bg-white/90 px-3.5 py-1.5 shadow-xs backdrop-blur-sm">
-                  <span className="flex h-2 w-2 rounded-full bg-[#159B43] animate-pulse" />
-                  <p className="text-xs font-semibold tracking-wide text-emerald-900 md:text-[13px]">
-                    Development of Garbage Classification, Location Tracking and Alert Generation System
-                  </p>
-                </div>
-
-                {/* Main and Largest Heading */}
-                <h1 className="mt-5 font-display text-4xl font-black tracking-tight text-[#0B4650] sm:text-5xl md:text-6xl lg:text-[4.25rem] lg:leading-[1.08]">
-                  Click to <span className="text-[#159B43]">Clean</span>
-                </h1>
-
-                {/* Reference Subheading */}
-                <h2 className="mt-4 font-display text-2xl font-extrabold leading-snug text-[#172B27] sm:text-3xl md:text-4xl">
-                  Spot Waste. <br className="hidden sm:inline" />
-                  Snap a Photo. <br className="hidden sm:inline" />
-                  <span className="relative inline-block text-[#159B43]">
-                    Keep Your City Clean.
-                    <span className="absolute -bottom-1 left-0 h-1.5 w-full rounded-full bg-[#159B43]/30" />
-                  </span>
-                </h2>
-
-                {/* AI-powered waste management description */}
-                <p className="mt-5 max-w-xl text-base font-normal leading-relaxed text-[#355E57] md:text-lg">
-                  An AI-powered waste alert system for a greener and cleaner community. Automatically classify waste, track garbage spot locations via GPS, and send instant alerts to municipal teams.
+              {/* Academic Project Badge / Subtitle */}
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/80 bg-white/95 px-3.5 py-1.5 shadow-sm backdrop-blur-md">
+                <span className="flex h-2 w-2 rounded-full bg-[#159B43] animate-pulse" />
+                <p className="text-xs font-semibold tracking-wide text-emerald-900 md:text-[13px]">
+                  Development of Garbage Classification, Location Tracking and Alert Generation System
                 </p>
-
-                {/* Primary Action Button (Matches Reference) */}
-                <div className="mt-8 flex flex-wrap items-center gap-4">
-                  <Link
-                    to={C.links.report}
-                    className="inline-flex min-h-[52px] items-center justify-center gap-3 rounded-full bg-[#159B43] px-8 py-3.5 text-base font-bold text-white shadow-lg shadow-emerald-700/25 transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#118037] hover:shadow-xl hover:shadow-emerald-700/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#159B43] focus-visible:ring-offset-2"
-                  >
-                    <Camera className="h-5 w-5" />
-                    <span>Report Waste</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-
-                  <Link
-                    to="/login"
-                    className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full border-2 border-emerald-800/30 bg-white/90 px-6 py-3 text-base font-bold text-[#0B4650] shadow-xs backdrop-blur-sm transition-all hover:bg-emerald-50 hover:text-[#159B43]"
-                  >
-                    <span>Citizen &amp; Staff Login</span>
-                  </Link>
-                </div>
-
-                {/* Bottom Value Props Bar (Direct Reference from Image) */}
-                <div className="mt-10 w-full max-w-2xl rounded-2xl border border-emerald-200/90 bg-white/80 p-3 shadow-md backdrop-blur-md sm:p-4">
-                  <div className="grid grid-cols-1 divide-y divide-emerald-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                    <div className="flex items-center gap-3 py-2 sm:px-3 sm:py-0">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#159B43]">
-                        <ShieldCheck className="h-5 w-5" />
-                      </div>
-                      <div className="leading-tight">
-                        <span className="block text-xs font-bold text-emerald-950">Cleaner</span>
-                        <span className="text-xs text-emerald-700">Environment</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 py-2 sm:px-3 sm:py-0">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#159B43]">
-                        <Leaf className="h-5 w-5" />
-                      </div>
-                      <div className="leading-tight">
-                        <span className="block text-xs font-bold text-emerald-950">Greener</span>
-                        <span className="text-xs text-emerald-700">Tomorrow</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 py-2 sm:px-3 sm:py-0">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#159B43]">
-                        <Users className="h-5 w-5" />
-                      </div>
-                      <div className="leading-tight">
-                        <span className="block text-xs font-bold text-emerald-950">A Healthier</span>
-                        <span className="text-xs text-emerald-700">Community</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
               </div>
 
-              {/* Right Column: Realistic City, Green Bin & Hand Holding Smartphone Scanning Garbage */}
-              <div className="relative flex items-center justify-center lg:col-span-5">
-                <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border-4 border-white bg-white shadow-2xl ring-1 ring-emerald-950/10">
-                  <img
-                    src="/images/hero-reference.jpg"
-                    alt="Realistic city background with greenery, recycling bin, trash bags and a phone scanning waste"
-                    className="h-[360px] w-full object-cover object-right sm:h-[440px] md:h-[480px]"
-                    loading="eager"
-                  />
-                  {/* Subtle realistic lighting gradient overlay */}
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-emerald-950/40 via-transparent to-transparent" />
-                  
-                  {/* Floating Live AI Badge on the Visual */}
-                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between rounded-2xl border border-white/40 bg-white/90 p-3 shadow-lg backdrop-blur-md">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-3 w-3 rounded-full bg-emerald-500 animate-ping" />
-                      <div>
-                        <p className="text-xs font-bold text-emerald-950">AI Detection Active</p>
-                        <p className="text-[11px] text-emerald-700">Biodegradable • Non-biodegradable • Hazardous</p>
-                      </div>
+              {/* Main and Largest Heading */}
+              <h1 className="mt-5 font-display text-4xl font-black tracking-tight text-[#0B4650] sm:text-5xl md:text-6xl lg:text-[4.5rem] lg:leading-[1.06]">
+                Click to <span className="text-[#159B43]">Clean</span>
+              </h1>
+
+              {/* Reference Subheading */}
+              <h2 className="mt-4 font-display text-2xl font-extrabold leading-snug text-[#172B27] sm:text-3xl md:text-4xl">
+                Spot Waste. <br className="hidden sm:inline" />
+                Snap a Photo. <br className="hidden sm:inline" />
+                <span className="relative inline-block text-[#159B43]">
+                  Keep Your City Clean.
+                  <span className="absolute -bottom-1 left-0 h-1.5 w-full rounded-full bg-[#159B43]/30" />
+                </span>
+              </h2>
+
+              {/* AI-powered waste management description */}
+              <p className="mt-5 max-w-xl text-base font-medium leading-relaxed text-[#234d45] md:text-lg">
+                An AI-powered waste alert system for a greener and cleaner community. Automatically classify waste, track garbage spot locations via GPS, and send instant alerts to municipal teams.
+              </p>
+
+              {/* Action Buttons */}
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <Link
+                  to={C.links.report}
+                  className="inline-flex min-h-[52px] items-center justify-center gap-3 rounded-full bg-[#159B43] px-8 py-3.5 text-base font-bold text-white shadow-xl shadow-emerald-700/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#118037] hover:shadow-2xl hover:shadow-emerald-700/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#159B43] focus-visible:ring-offset-2"
+                >
+                  <Camera className="h-5 w-5" />
+                  <span>Report Waste</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+
+                <Link
+                  to="/login"
+                  className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full border-2 border-emerald-900/30 bg-white/90 px-6 py-3 text-base font-bold text-[#0B4650] shadow-md backdrop-blur-md transition-all hover:bg-emerald-50 hover:text-[#159B43]"
+                >
+                  <span>Citizen &amp; Staff Login</span>
+                </Link>
+              </div>
+
+              {/* Bottom Value Props Bar */}
+              <div className="mt-10 w-full max-w-2xl rounded-2xl border border-emerald-200/90 bg-white/90 p-3 shadow-lg backdrop-blur-md sm:p-4">
+                <div className="grid grid-cols-1 divide-y divide-emerald-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                  <div className="flex items-center gap-3 py-2 sm:px-3 sm:py-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#159B43]">
+                      <ShieldCheck className="h-5 w-5" />
                     </div>
-                    <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800">
-                      98.4% Acc.
-                    </span>
+                    <div className="leading-tight">
+                      <span className="block text-xs font-bold text-emerald-950">Cleaner</span>
+                      <span className="text-xs font-semibold text-emerald-700">Environment</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 py-2 sm:px-3 sm:py-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#159B43]">
+                      <Leaf className="h-5 w-5" />
+                    </div>
+                    <div className="leading-tight">
+                      <span className="block text-xs font-bold text-emerald-950">Greener</span>
+                      <span className="text-xs font-semibold text-emerald-700">Tomorrow</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 py-2 sm:px-3 sm:py-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-[#159B43]">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="leading-tight">
+                      <span className="block text-xs font-bold text-emerald-950">A Healthier</span>
+                      <span className="text-xs font-semibold text-emerald-700">Community</span>
+                    </div>
                   </div>
                 </div>
               </div>
