@@ -1,3 +1,4 @@
+import HomePage from "./components/HomePage";
 import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSession } from "./api/client";
