@@ -414,6 +414,9 @@ export default function ReportWaste() {
               <img
                 src={preview}
                 alt="Selected waste"
+                loading="lazy"
+                width="480"
+                height="224"
                 className="mt-3 h-56 w-full rounded-xl border border-gray-200 object-cover"
               />
             )}

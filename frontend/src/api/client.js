@@ -2,6 +2,9 @@ export const API_BASE = import.meta.env.DEV
   ? (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "")
   : "";
 
+const GET_CACHE_TTL_MS = 10000;
+const getResponseCache = new Map();
+
 export function getSession() {
   try {
     const raw = localStorage.getItem("c2c_session");
@@ -25,9 +28,35 @@ export function getImageUrl(path) {
   return `${API_BASE}${path}`;
 }
 
+export function getPageResult(data) {
+  if (Array.isArray(data)) {
+    return { items: data, total: data.length, page: 1, total_pages: 1, summary: null };
+  }
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Number(data?.total) || 0,
+    page: Number(data?.page) || 1,
+    total_pages: Number(data?.total_pages) || 0,
+    summary: data?.summary || null,
+  };
+}
+
 export async function apiRequest(path, options = {}) {
   const session = getSession();
   const headers = new Headers(options.headers || {});
+  const method = (options.method || "GET").toUpperCase();
+  const cacheKey = `${session?.token || "anonymous"}:${path}`;
+
+  if (method === "GET") {
+    const cached = getResponseCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return JSON.parse(cached.body);
+    }
+    if (cached) getResponseCache.delete(cacheKey);
+    headers.set("Cache-Control", "max-age=15");
+  } else {
+    getResponseCache.clear();
+  }
 
   if (session?.token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${session.token}`);
@@ -39,6 +68,7 @@ export async function apiRequest(path, options = {}) {
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
+    ...(method === "GET" ? { cache: "no-store" } : {}),
     headers,
   });
 
@@ -54,6 +84,14 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     throw new Error(data?.detail || `Request failed with status ${response.status}`);
+  }
+
+  if (method === "GET") {
+    if (getResponseCache.size >= 100) getResponseCache.clear();
+    getResponseCache.set(cacheKey, {
+      body: JSON.stringify(data),
+      expiresAt: Date.now() + GET_CACHE_TTL_MS,
+    });
   }
 
   return data;

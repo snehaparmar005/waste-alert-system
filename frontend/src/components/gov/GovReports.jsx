@@ -5,8 +5,9 @@ import {
   LoaderCircle,
   Pencil,
 } from "lucide-react";
-import { apiRequest } from "../../api/client";
+import { apiRequest, getPageResult } from "../../api/client";
 import ReportUpdateModal from "../ReportUpdateModal";
+import PaginationControls from "../PaginationControls";
 
 const STATUS_OPTIONS = [
   { value: "submitted", label: "Submitted" },
@@ -52,22 +53,32 @@ export default function GovReports() {
   const [workers, setWorkers] = useState([]);
   const [catFilter, setCatFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalReports, setTotalReports] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [workersError, setWorkersError] = useState("");
   const [editingReport, setEditingReport] = useState(null);
 
-  const loadReports = useCallback(async () => {
+  const loadReports = useCallback(async (requestedPage = 1) => {
+    setLoading(true);
     try {
-      const data = await apiRequest("/api/reports");
-      setReports(Array.isArray(data) ? data : []);
+      const params = new URLSearchParams({ page: String(requestedPage), limit: "20" });
+      if (catFilter !== "all") params.set("category", catFilter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      const data = getPageResult(await apiRequest(`/api/reports?${params}`));
+      setReports(data.items);
+      setPage(data.page);
+      setTotalPages(data.total_pages);
+      setTotalReports(data.total);
       setError("");
     } catch (requestError) {
       setError(requestError.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [catFilter, statusFilter]);
 
   const loadWorkers = useCallback(async () => {
     try {
@@ -80,12 +91,14 @@ export default function GovReports() {
   }, []);
 
   useEffect(() => {
-    const loadingTimer = window.setTimeout(() => {
-      loadReports();
-      loadWorkers();
-    }, 0);
-    return () => window.clearTimeout(loadingTimer);
-  }, [loadReports, loadWorkers]);
+    const timer = window.setTimeout(() => loadReports(page), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadReports, page]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadWorkers, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadWorkers]);
 
   const filtered = reports.filter((report) => {
     const categorySlug = (
@@ -118,7 +131,10 @@ export default function GovReports() {
           <select
             aria-label="Filter by category"
             value={catFilter}
-            onChange={(event) => setCatFilter(event.target.value)}
+            onChange={(event) => {
+              setCatFilter(event.target.value);
+              setPage(1);
+            }}
             className="min-h-11 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
           >
             <option value="all">All Categories</option>
@@ -129,7 +145,10 @@ export default function GovReports() {
           <select
             aria-label="Filter by status"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
+            onChange={(event) => {
+              setStatusFilter(event.target.value);
+              setPage(1);
+            }}
             className="min-h-11 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
           >
             <option value="all">All Statuses</option>
@@ -230,6 +249,12 @@ export default function GovReports() {
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          total={totalReports}
+          onPageChange={setPage}
+        />
       </div>
 
       {editingReport && (

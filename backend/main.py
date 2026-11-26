@@ -6,10 +6,13 @@ import io
 import math
 import os
 import tempfile
+import threading
+import time
+from copy import deepcopy
 from typing import Optional
 
 import numpy as np
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
@@ -43,6 +46,44 @@ VALID_SLUGS = set(LABEL_MAP)
 VALID_STATUSES = {"submitted", "assigned", "in_progress", "cleaned", "rejected"}
 SECRET_KEY = os.getenv("SECRET_KEY", "click2clean-super-secret-key-2026")
 _model = None
+_response_cache = {}
+_response_cache_lock = threading.Lock()
+CACHE_TTL_SECONDS = 20
+
+
+def get_cached_response(key):
+    now = time.monotonic()
+    with _response_cache_lock:
+        cached = _response_cache.get(key)
+        if cached and cached[0] > now:
+            return deepcopy(cached[1])
+        _response_cache.pop(key, None)
+    return None
+
+
+def set_cached_response(key, value):
+    now = time.monotonic()
+    with _response_cache_lock:
+        expired_keys = [
+            cached_key
+            for cached_key, (expires_at, _) in _response_cache.items()
+            if expires_at <= now
+        ]
+        for cached_key in expired_keys:
+            _response_cache.pop(cached_key, None)
+        if key not in _response_cache and len(_response_cache) >= 256:
+            _response_cache.pop(next(iter(_response_cache)))
+        _response_cache[key] = (now + CACHE_TTL_SECONDS, deepcopy(value))
+
+
+def invalidate_response_cache(*prefixes):
+    with _response_cache_lock:
+        if not prefixes:
+            _response_cache.clear()
+            return
+        for key in list(_response_cache):
+            if any(key.startswith(prefix) for prefix in prefixes):
+                _response_cache.pop(key, None)
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +252,7 @@ def create_notification(title, message, user_id=None, target_role=None):
                 (user_id, target_role, title, message),
             )
         conn.commit()
+        invalidate_response_cache("notifications:")
     finally:
         conn.close()
 
@@ -321,6 +363,17 @@ def seed_users() -> None:
                 )
             except Exception:
                 pass
+            for index_name, column_name in (
+                ("idx_reports_user_id", "user_id"),
+                ("idx_reports_status", "status"),
+                ("idx_reports_assigned_worker_id", "assigned_worker_id"),
+            ):
+                try:
+                    cur.execute(
+                        f"CREATE INDEX {index_name} ON reports ({column_name})"
+                    )
+                except Exception:
+                    pass
 
             # Ensure notifications table exists
             cur.execute("""
@@ -635,18 +688,18 @@ def change_password(payload: PasswordChangeSchema, user: dict = Depends(get_curr
 # Report helpers
 # ---------------------------------------------------------------------------
 
-def format_row(row: dict) -> dict:
+def format_row(row: dict, include_image: bool = True) -> dict:
     slug = row["category_slug"]
     created_at = row.get("created_at")
     status = row["status"]
     if str(status).lower() == "reported":
         status = "submitted"
-    return {
+    formatted = {
         "id": row["id"],
         "user_id": row["user_id"],
         "user_name": row.get("user_name"),
-        "image_url": row["image_path"],
         "category": {"slug": slug, "label": LABEL_MAP.get(slug, slug)},
+        "category_slug": slug,
         "corrected_slug": row.get("corrected_slug"),
         "confidence": float(row["confidence"]),
         "needs_retake": bool(row["needs_retake"]),
@@ -663,6 +716,9 @@ def format_row(row: dict) -> dict:
         if hasattr(created_at, "isoformat")
         else created_at,
     }
+    if include_image and "image_path" in row:
+        formatted["image_url"] = row["image_path"]
+    return formatted
 
 
 # ---------------------------------------------------------------------------
@@ -717,10 +773,10 @@ async def create_report(
             prediction = predict_waste(temp_path)
             with Image.open(temp_path) as source:
                 thumbnail = source.convert("RGB")
-            thumbnail.thumbnail((640, 640))
+            thumbnail.thumbnail((480, 480))
             image_buffer = io.BytesIO()
-            thumbnail.save(image_buffer, format="JPEG", quality=75)
-            data_uri = "data:image/jpeg;base64," + base64.b64encode(
+            thumbnail.save(image_buffer, format="WEBP", quality=70)
+            data_uri = "data:image/webp;base64," + base64.b64encode(
                 image_buffer.getvalue()
             ).decode("ascii")
         except UnidentifiedImageError as exc:
@@ -761,13 +817,18 @@ async def create_report(
             )
 
             cur.execute(
-                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "SELECT r.id, r.user_id, u.name AS user_name, r.category_slug, "
+                "r.corrected_slug, r.confidence, r.needs_retake, r.latitude, "
+                "r.longitude, r.ward, r.remarks, r.description, r.status, "
+                "r.reference_id, r.assigned_worker_id, r.created_at, "
+                "w.name AS assigned_worker_name "
                 "FROM reports r JOIN users u ON r.user_id = u.id "
                 "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             row = cur.fetchone()
         conn.commit()
+        invalidate_response_cache("reports:")
         log_audit(
             user["id"], user["name"], "report_created", "report", report_id,
             details=f"ref={reference_id}",
@@ -781,32 +842,124 @@ async def create_report(
                 message=f"{reference_id} was submitted for {report_ward}.",
                 target_role=target_role,
             )
-        return format_row(row)
+        return format_row(row, include_image=False)
     finally:
         conn.close()
 
 
 @app.get("/api/reports")
-def get_reports(user: dict = Depends(get_current_user)) -> list:
+def get_reports(
+    response: Response,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    assigned_only: bool = Query(False),
+    legacy: bool = Query(False),
+    user: dict = Depends(get_current_user),
+):
+    response.headers["Cache-Control"] = "private, max-age=15"
+    cache_key = (
+        f"reports:{user['id']}:{user['role']}:{page}:{limit}:"
+        f"{status or ''}:{category or ''}:{int(assigned_only)}:{int(legacy)}"
+    )
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return cached
+
+    scope_clauses = []
+    scope_params = []
+    if user["role"] == "citizen":
+        scope_clauses.append("r.user_id = %s")
+        scope_params.append(user["id"])
+    elif user["role"] == "worker":
+        if assigned_only:
+            scope_clauses.append("r.assigned_worker_id = %s")
+            scope_params.append(user["id"])
+        else:
+            scope_clauses.append("(r.assigned_worker_id = %s OR r.user_id = %s)")
+            scope_params.extend((user["id"], user["id"]))
+    scope_sql = f" WHERE {' AND '.join(scope_clauses)}" if scope_clauses else ""
+
+    filters = list(scope_clauses)
+    filter_params = list(scope_params)
+    if status:
+        if status == "submitted":
+            filters.append("r.status IN ('submitted', 'reported')")
+        else:
+            filters.append("r.status = %s")
+            filter_params.append(status)
+    if category:
+        filters.append("COALESCE(r.corrected_slug, r.category_slug) = %s")
+        filter_params.append(category)
+    filter_sql = f" WHERE {' AND '.join(filters)}" if filters else ""
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            query = (
-                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+            cur.execute(
+                "SELECT COUNT(*) AS total, "
+                "SUM(CASE WHEN r.status IN ('submitted', 'reported') THEN 1 ELSE 0 END) AS submitted, "
+                "SUM(CASE WHEN r.status = 'assigned' THEN 1 ELSE 0 END) AS assigned, "
+                "SUM(CASE WHEN r.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress, "
+                "SUM(CASE WHEN r.status = 'cleaned' THEN 1 ELSE 0 END) AS cleaned, "
+                "SUM(CASE WHEN r.status = 'rejected' THEN 1 ELSE 0 END) AS rejected "
+                f"FROM reports r{scope_sql}",
+                tuple(scope_params),
+            )
+            summary_row = cur.fetchone()
+            cur.execute(
+                "SELECT COALESCE(r.corrected_slug, r.category_slug) AS category_slug, "
+                f"COUNT(*) AS count FROM reports r{scope_sql} "
+                "GROUP BY COALESCE(r.corrected_slug, r.category_slug)",
+                tuple(scope_params),
+            )
+            categories = {
+                row["category_slug"] or "other": int(row["count"])
+                for row in cur.fetchall()
+            }
+            cur.execute(
+                f"SELECT COUNT(*) AS total FROM reports r{filter_sql}",
+                tuple(filter_params),
+            )
+            total = int(cur.fetchone()["total"])
+
+            list_query = (
+                "SELECT r.id, r.reference_id, r.user_id, u.name AS user_name, "
+                "r.category_slug, r.corrected_slug, r.confidence, r.needs_retake, "
+                "r.latitude, r.longitude, r.ward, r.remarks, r.description, "
+                "r.status, r.assigned_worker_id, w.name AS assigned_worker_name, "
+                "r.created_at "
                 "FROM reports r JOIN users u ON r.user_id = u.id "
                 "LEFT JOIN users w ON r.assigned_worker_id = w.id"
+                f"{filter_sql} ORDER BY r.id DESC LIMIT %s OFFSET %s"
             )
-            if user["role"] == "citizen":
-                query += " WHERE r.user_id = %s ORDER BY r.id DESC"
-                cur.execute(query, (user["id"],))
-            elif user["role"] == "worker":
-                query += " WHERE r.assigned_worker_id = %s OR r.user_id = %s ORDER BY r.id DESC"
-                cur.execute(query, (user["id"], user["id"]))
-            else:
-                query += " ORDER BY r.id DESC"
-                cur.execute(query)
+            cur.execute(
+                list_query,
+                tuple(filter_params) + (limit, (page - 1) * limit),
+            )
             rows = cur.fetchall()
-        return [format_row(row) for row in rows]
+        items = [format_row(row) for row in rows]
+        if legacy:
+            result = items
+        else:
+            result = {
+                "items": items,
+                "total": total,
+                "page": page,
+                "total_pages": math.ceil(total / limit),
+                "summary": {
+                    "total": int(summary_row["total"] or 0),
+                    "submitted": int(summary_row["submitted"] or 0),
+                    "assigned": int(summary_row["assigned"] or 0),
+                    "in_progress": int(summary_row["in_progress"] or 0),
+                    "cleaned": int(summary_row["cleaned"] or 0),
+                    "rejected": int(summary_row["rejected"] or 0),
+                    "categories": categories,
+                },
+            }
+        set_cached_response(cache_key, result)
+        return result
     finally:
         conn.close()
 
@@ -851,7 +1004,11 @@ def patch_report(
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "SELECT r.id, r.user_id, u.name AS user_name, r.category_slug, "
+                "r.corrected_slug, r.confidence, r.needs_retake, r.latitude, "
+                "r.longitude, r.ward, r.remarks, r.description, r.status, "
+                "r.reference_id, r.assigned_worker_id, r.created_at, "
+                "w.name AS assigned_worker_name "
                 "FROM reports r JOIN users u ON r.user_id = u.id "
                 "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
@@ -951,13 +1108,18 @@ def patch_report(
                         (value, report_id),
                     )
             cur.execute(
-                "SELECT r.*, u.name AS user_name, w.name AS assigned_worker_name "
+                "SELECT r.id, r.user_id, u.name AS user_name, r.category_slug, "
+                "r.corrected_slug, r.confidence, r.needs_retake, r.latitude, "
+                "r.longitude, r.ward, r.remarks, r.description, r.status, "
+                "r.reference_id, r.assigned_worker_id, r.created_at, "
+                "w.name AS assigned_worker_name "
                 "FROM reports r JOIN users u ON r.user_id = u.id "
                 "LEFT JOIN users w ON r.assigned_worker_id = w.id WHERE r.id = %s",
                 (report_id,),
             )
             row = cur.fetchone()
         conn.commit()
+        invalidate_response_cache("reports:", "notifications:")
 
         existing_status = str(existing.get("status") or "").lower()
         if existing_status == "reported":
@@ -1001,7 +1163,7 @@ def patch_report(
                     user_id=assigned_worker_id,
                 )
 
-        return format_row(row)
+        return format_row(row, include_image=False)
     finally:
         conn.close()
 
@@ -1015,6 +1177,7 @@ def delete_report(report_id: int, user: dict = Depends(get_current_user)) -> dic
             if cur.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Report not found.")
         conn.commit()
+        invalidate_response_cache("reports:", "notifications:")
         return {"deleted": True}
     finally:
         conn.close()
@@ -1197,7 +1360,15 @@ def delete_worker(
 # ---------------------------------------------------------------------------
 
 @app.get("/api/notifications")
-def get_notifications(user: dict = Depends(get_current_user)) -> dict:
+def get_notifications(
+    response: Response,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    response.headers["Cache-Control"] = "private, max-age=15"
+    cache_key = f"notifications:{user['id']}:{user['role']}"
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return cached
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -1220,10 +1391,12 @@ def get_notifications(user: dict = Depends(get_current_user)) -> dict:
                 row["is_read"] = bool(row.get("is_read"))
                 if hasattr(row.get("created_at"), "isoformat"):
                     row["created_at"] = row["created_at"].isoformat()
-            return {
+            result = {
                 "notifications": rows,
                 "unread_count": int(unread_row["unread_count"]),
             }
+            set_cached_response(cache_key, result)
+            return result
     finally:
         conn.close()
 
@@ -1240,6 +1413,7 @@ def mark_all_notifications_read(user: dict = Depends(get_current_user)) -> dict:
             )
             marked_count = cur.rowcount
         conn.commit()
+        invalidate_response_cache("notifications:")
         return {"marked_count": marked_count, "unread_count": 0}
     finally:
         conn.close()
@@ -1258,6 +1432,7 @@ def mark_notification_read(notification_id: int, user: dict = Depends(get_curren
             if cur.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Notification not found.")
         conn.commit()
+        invalidate_response_cache("notifications:")
         return {"message": "Notification marked as read."}
     finally:
         conn.close()

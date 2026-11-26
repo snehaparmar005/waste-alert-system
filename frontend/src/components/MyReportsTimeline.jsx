@@ -12,8 +12,9 @@ import {
   Save,
   X,
 } from "lucide-react";
-import { apiRequest } from "../api/client";
+import { apiRequest, getPageResult } from "../api/client";
 import { openInMaps } from "../utils/openMap";
+import PaginationControls from "./PaginationControls";
 
 const WASTE_TYPES = [
   { value: "biodegradable", label: "Biodegradable" },
@@ -85,19 +86,31 @@ function getStatusStyle(status) {
 
 export default function MyReportsTimeline() {
   const [reports, setReports] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalReports, setTotalReports] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [viewingReport, setViewingReport] = useState(null);
+  const [viewingDetails, setViewingDetails] = useState(null);
+  const [viewingLoading, setViewingLoading] = useState(false);
+  const [viewingError, setViewingError] = useState("");
+  const viewingReportId = viewingReport?.id;
   const [editingReport, setEditingReport] = useState(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const [editError, setEditError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const loadReports = useCallback(async () => {
+  const loadReports = useCallback(async (requestedPage = 1) => {
     try {
-      const data = await apiRequest("/api/reports");
-      setReports(Array.isArray(data) ? data : []);
+      const data = getPageResult(
+        await apiRequest(`/api/reports?page=${requestedPage}&limit=20`),
+      );
+      setReports(data.items);
+      setPage(data.page);
+      setTotalPages(data.total_pages);
+      setTotalReports(data.total);
       setError("");
     } catch (requestError) {
       setError(requestError.message);
@@ -107,16 +120,35 @@ export default function MyReportsTimeline() {
   }, []);
 
   useEffect(() => {
-    const initialRefresh = window.setTimeout(loadReports, 0);
-    const refreshInterval = window.setInterval(loadReports, 15000);
-    window.addEventListener("focus", loadReports);
+    const initialRefresh = window.setTimeout(() => loadReports(page), 0);
+    const refreshInterval = window.setInterval(() => loadReports(page), 15000);
+    const refreshOnFocus = () => loadReports(page);
+    window.addEventListener("focus", refreshOnFocus);
 
     return () => {
       window.clearTimeout(initialRefresh);
       window.clearInterval(refreshInterval);
-      window.removeEventListener("focus", loadReports);
+      window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [loadReports]);
+  }, [loadReports, page]);
+
+  useEffect(() => {
+    if (!viewingReportId) return undefined;
+    let active = true;
+    apiRequest(`/api/reports/${viewingReportId}`)
+      .then((report) => {
+        if (active) setViewingDetails(report);
+      })
+      .catch((requestError) => {
+        if (active) setViewingError(requestError.message);
+      })
+      .finally(() => {
+        if (active) setViewingLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [viewingReportId]);
 
   const openEditDialog = (report) => {
     if (getReportStatus(report) !== "submitted") return;
@@ -208,7 +240,10 @@ export default function MyReportsTimeline() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={loadReports}
+            onClick={() => {
+              setLoading(true);
+              loadReports(page);
+            }}
             className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
           >
             <RefreshCw className="h-4 w-4" />
@@ -321,7 +356,12 @@ export default function MyReportsTimeline() {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => setViewingReport(report)}
+                            onClick={() => {
+                              setViewingDetails(null);
+                              setViewingLoading(true);
+                              setViewingError("");
+                              setViewingReport(report);
+                            }}
                             aria-label={`View ${getReferenceId(report)}`}
                             className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
                           >
@@ -348,6 +388,17 @@ export default function MyReportsTimeline() {
             </table>
           </div>
         </div>
+      )}
+      {!loading && totalReports > 0 && (
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          total={totalReports}
+          onPageChange={(nextPage) => {
+            setLoading(true);
+            setPage(nextPage);
+          }}
+        />
       )}
 
       {viewingReport && (
@@ -382,10 +433,23 @@ export default function MyReportsTimeline() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            {viewingReport.image_url && (
+            {viewingLoading && (
+              <div className="h-48 animate-pulse rounded-xl bg-gray-100" role="status">
+                Loading report details...
+              </div>
+            )}
+            {viewingError && (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                {viewingError}
+              </p>
+            )}
+            {viewingDetails?.image_url && (
               <img
-                src={viewingReport.image_url}
-                alt={getWasteType(viewingReport)}
+                src={viewingDetails.image_url}
+                alt={getWasteType(viewingDetails)}
+                loading="lazy"
+                width="480"
+                height="192"
                 className="h-48 w-full rounded-xl border border-gray-200 object-cover"
               />
             )}
@@ -393,20 +457,20 @@ export default function MyReportsTimeline() {
               <div>
                 <dt className="font-semibold text-gray-500">Description</dt>
                 <dd className="mt-0.5 text-gray-800">
-                  {viewingReport.description || "No description"}
+                  {viewingDetails?.description || viewingReport.description || "No description"}
                 </dd>
               </div>
               <div>
                 <dt className="font-semibold text-gray-500">Remarks</dt>
-                <dd className="mt-0.5 text-gray-800">{viewingReport.remarks || "None"}</dd>
+                <dd className="mt-0.5 text-gray-800">{viewingDetails?.remarks || viewingReport.remarks || "None"}</dd>
               </div>
               <div>
                 <dt className="font-semibold text-gray-500">Waste type</dt>
-                <dd className="mt-0.5 text-gray-800">{getWasteType(viewingReport)}</dd>
+                <dd className="mt-0.5 text-gray-800">{getWasteType(viewingDetails || viewingReport)}</dd>
               </div>
               <div>
                 <dt className="font-semibold text-gray-500">Ward</dt>
-                <dd className="mt-0.5 text-gray-800">{viewingReport.ward || "Not specified"}</dd>
+                <dd className="mt-0.5 text-gray-800">{(viewingDetails || viewingReport).ward || "Not specified"}</dd>
               </div>
             </dl>
           </section>

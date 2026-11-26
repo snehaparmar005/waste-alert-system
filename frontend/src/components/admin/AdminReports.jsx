@@ -6,8 +6,9 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { apiRequest } from "../../api/client";
+import { apiRequest, getPageResult } from "../../api/client";
 import ReportUpdateModal from "../ReportUpdateModal";
+import PaginationControls from "../PaginationControls";
 
 function getStatus(report) {
   const status = (report.status || "").toLowerCase();
@@ -35,15 +36,25 @@ export default function AdminReports() {
   const [workers, setWorkers] = useState([]);
   const [workersError, setWorkersError] = useState("");
   const [selectedReport, setSelectedReport] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalReports, setTotalReports] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
-      apiRequest("/api/reports")
-        .then((data) => {
-          if (active) setReports(Array.isArray(data) ? data : []);
+      setLoading(true);
+      apiRequest(`/api/reports?page=${page}&limit=20`)
+        .then((response) => {
+          if (active) {
+            const data = getPageResult(response);
+            setReports(data.items);
+            setPage(data.page);
+            setTotalPages(data.total_pages);
+            setTotalReports(data.total);
+          }
         })
         .catch((requestError) => {
           if (active) setError(requestError.message);
@@ -64,7 +75,7 @@ export default function AdminReports() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, []);
+  }, [page]);
 
   const handleDelete = async (report) => {
     if (!window.confirm(`Delete ${getReferenceId(report)}? This cannot be undone.`)) {
@@ -76,6 +87,8 @@ export default function AdminReports() {
       setReports((currentReports) =>
         currentReports.filter((currentReport) => currentReport.id !== report.id),
       );
+      setTotalReports((currentTotal) => Math.max(0, currentTotal - 1));
+      if (reports.length === 1 && page > 1) setPage((currentPage) => currentPage - 1);
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -187,6 +200,12 @@ export default function AdminReports() {
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          total={totalReports}
+          onPageChange={setPage}
+        />
       </section>
 
       {selectedReport && (

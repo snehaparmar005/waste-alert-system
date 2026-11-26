@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
-import { apiRequest } from "../../api/client";
+import { apiRequest, getPageResult } from "../../api/client";
 
 export default function GovReportDetail() {
   const { id } = useParams();
@@ -13,8 +13,12 @@ export default function GovReportDetail() {
     apiRequest(`/api/reports/${id}`)
       .then(setReport)
       .catch(() => {
-        apiRequest("/api/reports")
-          .then((list) => setReport(list.find((item) => String(item.id) === String(id))))
+        apiRequest("/api/reports?legacy=true&limit=100")
+          .then((list) =>
+            setReport(
+              getPageResult(list).items.find((item) => String(item.id) === String(id)),
+            ),
+          )
           .catch((err) => setError(err.message));
       });
   }, [id]);
@@ -52,7 +56,14 @@ export default function GovReportDetail() {
       <div className="bg-white rounded-2xl shadow-sm border p-6 grid md:grid-cols-2 gap-6">
         <div className="space-y-4">
           {report.image_url ? (
-            <img src={report.image_url} alt={catLabel} className="h-60 w-full object-cover rounded-xl border" />
+            <img
+              src={report.image_url}
+              alt={catLabel}
+              loading="lazy"
+              width="560"
+              height="240"
+              className="h-60 w-full object-cover rounded-xl border"
+            />
           ) : (
             <div className="h-60 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 text-sm border">
               No photo uploaded

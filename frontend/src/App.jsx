@@ -1,23 +1,33 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSession } from "./api/client";
 import AppShell from "./components/AppShell";
 import HomePage from "./components/HomePage";
 import LoginCard from "./components/LoginCard";
 import RegisterCard from "./components/RegisterCard";
-import ReportWaste from "./components/ReportWaste";
 import MyReportsTimeline from "./components/MyReportsTimeline";
 import UserProfile from "./components/UserProfile";
-import GovDashboard from "./components/gov/GovDashboard";
 import GovReports from "./components/gov/GovReports";
 import GovWorkers from "./components/gov/GovWorkers";
-import AdminDashboard from "./components/admin/AdminDashboard";
-import AdminReports from "./components/admin/AdminReports";
 import AdminUsers from "./components/admin/AdminUsers";
-import AdminAuditLogs from "./components/admin/AdminAuditLogs";
 import AdminAuthorities from "./components/admin/AdminAuthorities";
 import AdminAlerts from "./components/admin/AdminAlerts";
-import WorkerDashboard from "./components/worker/WorkerDashboard";
+
+const GovDashboard = lazy(() => import("./components/gov/GovDashboard"));
+const ReportWaste = lazy(() => import("./components/ReportWaste"));
+const WorkerDashboard = lazy(() => import("./components/worker/WorkerDashboard"));
+const AdminDashboard = lazy(() => import("./components/admin/AdminDashboard"));
+const AdminReports = lazy(() => import("./components/admin/AdminReports"));
+const AdminAuditLogs = lazy(() => import("./components/admin/AdminAuditLogs"));
+
+function RouteLoading() {
+  return (
+    <div role="status" className="mx-auto flex min-h-48 max-w-7xl items-center justify-center gap-3 px-4 text-sm text-gray-600">
+      <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-[#159B43]" />
+      Loading dashboard...
+    </div>
+  );
+}
 
 function getHomePath(role) {
   if (role === "admin") return "/admin/dashboard";
@@ -46,6 +56,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppShell user={user} onLogout={handleLogout}>
+        <Suspense fallback={<RouteLoading />}>
         <Routes>
           <Route
             path="/"
@@ -124,6 +135,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </AppShell>
     </BrowserRouter>
   );

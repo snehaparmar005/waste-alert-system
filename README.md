@@ -36,6 +36,17 @@
 
 ---
 
+## Reports API performance
+
+`GET /api/reports?page=1&limit=20` returns `{ items, total, page, total_pages, summary }`.
+The list contains lightweight report fields and summary counts; use
+`GET /api/reports/{report_id}` to load the report image when opening a detail or
+update view. Existing array consumers can request `legacy=true` (still paginated).
+Report and notification GET responses use a short-lived cache; report writes
+invalidate it immediately. New report images are stored as WebP at up to 480x480.
+
+---
+
 ## ⚙️ How to Run Locally
 
 ### 1. Start the Backend (FastAPI)

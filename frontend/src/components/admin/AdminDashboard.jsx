@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import {
   ArrowRight,
   ChartPie,
@@ -11,8 +10,11 @@ import {
   Trash2,
   Truck,
 } from "lucide-react";
-import { apiRequest, getSession } from "../../api/client";
-import { openInMaps } from "../../utils/openMap";
+import { apiRequest, getPageResult, getSession } from "../../api/client";
+import LazyRender from "../LazyRender";
+import PaginationControls from "../PaginationControls";
+
+const AdminReportsMap = lazy(() => import("./AdminReportsMap"));
 
 function getStatus(report) {
   const status = (report.status || "").toLowerCase();
@@ -33,62 +35,47 @@ function getStatusStyle(status) {
 
 export default function AdminDashboard() {
   const [reports, setReports] = useState([]);
+  const [mapReports, setMapReports] = useState([]);
+  const [mapPage, setMapPage] = useState(1);
+  const [mapTotalPages, setMapTotalPages] = useState(0);
+  const [mapTotal, setMapTotal] = useState(0);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const user = getSession()?.user;
 
   useEffect(() => {
-    apiRequest("/api/reports")
-      .then((data) => setReports(Array.isArray(data) ? data : []))
-      .catch((err) => setError(err.message));
-  }, []);
+    apiRequest(`/api/reports?page=${mapPage}&limit=20`)
+      .then((response) => {
+        const data = getPageResult(response);
+        setMapReports(data.items);
+        setMapTotalPages(data.total_pages);
+        setMapTotal(data.total);
+        if (mapPage === 1) {
+          setReports(data.items);
+          setSummary(data.summary);
+        }
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => {
+        if (mapPage === 1) setLoading(false);
+      });
+  }, [mapPage]);
 
-  const total = reports.length;
-  const resolved = reports.filter((report) => getStatus(report) === "cleaned").length;
-  const inProgress = reports.filter((report) =>
-    ["assigned", "in_progress"].includes(getStatus(report)),
-  ).length;
-  const pending = reports.filter((report) => getStatus(report) === "submitted").length;
+  const total = summary?.total || 0;
+  const resolved = summary?.cleaned || 0;
+  const inProgress = (summary?.assigned || 0) + (summary?.in_progress || 0);
+  const pending = summary?.submitted || 0;
 
   const getLabel = (r) => r.category?.label || r.waste_type || "Uncategorized";
 
-  const bioCount = reports.filter((r) => getLabel(r).toLowerCase().includes("bio")).length;
-  const hazCount = reports.filter((r) => getLabel(r).toLowerCase().includes("haz")).length;
-  const nonBioCount = Math.max(0, total - bioCount - hazCount);
+  const categoryCounts = summary?.categories || {};
+  const bioCount = categoryCounts.biodegradable || 0;
+  const nonBioCount = categoryCounts.non_biodegradable || 0;
 
   const bioPct = total ? Math.round((bioCount / total) * 100) : 0;
   const nonBioPct = total ? Math.round((nonBioCount / total) * 100) : 0;
   const hazPct = total ? Math.max(0, 100 - bioPct - nonBioPct) : 0;
-
-  const getCoords = (r) => {
-    const latitude = Number(r.latitude);
-    const longitude = Number(r.longitude);
-    if (
-      r.latitude != null &&
-      r.longitude != null &&
-      Number.isFinite(latitude) &&
-      Number.isFinite(longitude) &&
-      latitude >= -90 &&
-      latitude <= 90 &&
-      longitude >= -180 &&
-      longitude <= 180 &&
-      !(latitude === 0 && longitude === 0)
-    ) {
-      return [latitude, longitude];
-    }
-    const parts = (r.coordinates || "").split(",").map(Number);
-    if (
-      parts.length === 2 &&
-      parts.every(Number.isFinite) &&
-      parts[0] >= -90 &&
-      parts[0] <= 90 &&
-      parts[1] >= -180 &&
-      parts[1] <= 180 &&
-      !(parts[0] === 0 && parts[1] === 0)
-    ) {
-      return [parts[0], parts[1]];
-    }
-    return null;
-  };
 
   return (
     <div className="space-y-6">
@@ -122,7 +109,9 @@ export default function AdminDashboard() {
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-[#159B43]"><Trash2 className="h-6 w-6" /></div>
           <div>
-            <p className="text-2xl font-extrabold text-gray-800">{total}</p>
+            <p className="text-2xl font-extrabold text-gray-800">
+              {loading ? <span className="inline-block h-7 w-12 animate-pulse rounded bg-gray-100" /> : total}
+            </p>
             <p className="text-xs text-gray-500 font-medium">Total Complaints</p>
           </div>
         </div>
@@ -130,7 +119,9 @@ export default function AdminDashboard() {
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Clock3 className="h-6 w-6" /></div>
           <div>
-            <p className="text-2xl font-extrabold text-gray-800">{pending}</p>
+            <p className="text-2xl font-extrabold text-gray-800">
+              {loading ? <span className="inline-block h-7 w-12 animate-pulse rounded bg-gray-100" /> : pending}
+            </p>
             <p className="text-xs text-gray-500 font-medium">Pending</p>
           </div>
         </div>
@@ -138,7 +129,9 @@ export default function AdminDashboard() {
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><CheckCircle2 className="h-6 w-6" /></div>
           <div>
-            <p className="text-2xl font-extrabold text-gray-800">{resolved}</p>
+            <p className="text-2xl font-extrabold text-gray-800">
+              {loading ? <span className="inline-block h-7 w-12 animate-pulse rounded bg-gray-100" /> : resolved}
+            </p>
             <p className="text-xs text-gray-500 font-medium">Resolved</p>
           </div>
         </div>
@@ -146,7 +139,9 @@ export default function AdminDashboard() {
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><Truck className="h-6 w-6" /></div>
           <div>
-            <p className="text-2xl font-extrabold text-gray-800">{inProgress}</p>
+            <p className="text-2xl font-extrabold text-gray-800">
+              {loading ? <span className="inline-block h-7 w-12 animate-pulse rounded bg-gray-100" /> : inProgress}
+            </p>
             <p className="text-xs text-gray-500 font-medium">In Progress</p>
           </div>
         </div>
@@ -161,35 +156,22 @@ export default function AdminDashboard() {
               <span className="inline-flex items-center gap-1">View All <ArrowRight className="h-3.5 w-3.5" /></span>
             </Link>
           </div>
-          <div className="h-72 rounded-xl overflow-hidden border border-gray-200">
-            <MapContainer center={[26.2183, 78.1828]} zoom={13} style={{ height: "100%", width: "100%" }}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              {reports.map((report) => {
-                const coordinates = getCoords(report);
-                if (!coordinates) return null;
-                return (
-                  <Marker key={report.id} position={coordinates}>
-                    <Popup>
-                      <div className="space-y-1 text-xs">
-                        <p className="font-bold">{getReferenceId(report)} · {getLabel(report)}</p>
-                        <p>Status: {getStatus(report).replaceAll("_", " ")}</p>
-                        <p className="font-mono text-[11px]">GPS: {coordinates[0]}, {coordinates[1]}</p>
-                        <button
-                          type="button"
-                          onClick={() => openInMaps(coordinates[0], coordinates[1])}
-                          className="mt-1 rounded bg-[#0B4650] px-2 py-1 text-[11px] font-semibold text-white"
-                        >
-                          Open with Map
-                        </button>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-            </MapContainer>
+          <div className="h-72 overflow-hidden rounded-xl border border-gray-200">
+            <LazyRender fallback={<div className="h-full animate-pulse bg-gray-100" />}>
+              <Suspense fallback={<div className="h-full animate-pulse bg-gray-100" />}>
+                <AdminReportsMap reports={mapReports} />
+              </Suspense>
+            </LazyRender>
           </div>
+          <PaginationControls
+            page={mapPage}
+            totalPages={mapTotalPages}
+            total={mapTotal}
+            onPageChange={setMapPage}
+          />
         </div>
 
+        <LazyRender fallback={<div className="h-64 animate-pulse rounded-2xl bg-gray-100" />}>
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
           <h2 className="inline-flex items-center gap-2 font-bold text-[#0B4650]"><ChartPie className="h-4 w-4" /> Waste Category Distribution</h2>
 
@@ -230,9 +212,11 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+        </LazyRender>
       </div>
 
       {/* Recent Reports Table + CTA Card */}
+      <LazyRender fallback={<div className="h-64 animate-pulse rounded-2xl bg-gray-100" />}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-5 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
           <div className="flex justify-between items-center mb-3">
@@ -242,7 +226,12 @@ export default function AdminDashboard() {
             </Link>
           </div>
 
-          {reports.length === 0 ? (
+          {loading ? (
+            <div className="space-y-3 py-4">
+              <div className="h-4 animate-pulse rounded bg-gray-100" />
+              <div className="h-4 animate-pulse rounded bg-gray-100" />
+            </div>
+          ) : reports.length === 0 ? (
             <p className="text-xs text-gray-500 py-4">No reports recorded yet.</p>
           ) : (
             <table className="w-full text-left text-xs">
@@ -297,6 +286,7 @@ export default function AdminDashboard() {
           </Link>
         </div>
       </div>
+      </LazyRender>
     </div>
   );
 }

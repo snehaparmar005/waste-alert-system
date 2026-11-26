@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -10,12 +10,13 @@ import {
   RefreshCw,
   Truck,
 } from "lucide-react";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
-import { apiRequest, getImageUrl, getSession } from "../../api/client";
+import { apiRequest, getPageResult, getSession } from "../../api/client";
 import { openInMaps } from "../../utils/openMap";
+import LazyRender from "../LazyRender";
+import PaginationControls from "../PaginationControls";
 
-const MAP_CENTER = [26.2183, 78.1828];
 const CHART_CIRCUMFERENCE = 2 * Math.PI * 40;
+const WorkerTasksMap = lazy(() => import("./WorkerTasksMap"));
 const STATUS_CATEGORIES = [
   { key: "assigned", label: "Assigned", color: "#f59e0b" },
   { key: "in_progress", label: "In Progress", color: "#3b82f6" },
@@ -57,36 +58,34 @@ function getStatusStyle(status) {
   return "bg-slate-100 text-slate-700";
 }
 
-function FitMapToTasks({ positions }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (positions.length === 1) {
-      map.setView(positions[0], 14);
-    } else if (positions.length > 1) {
-      map.fitBounds(positions, { padding: [24, 24], maxZoom: 14 });
-    }
-  }, [map, positions]);
-
-  return null;
-}
-
 export default function WorkerDashboard() {
   const [tasks, setTasks] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalTasks, setTotalTasks] = useState(0);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [error, setError] = useState("");
   const user = getSession()?.user;
 
-  const loadTasks = useCallback(async () => {
+  const loadTasks = useCallback(async (requestedPage = 1) => {
     try {
-      const data = await apiRequest("/api/reports");
-      const reports = Array.isArray(data) ? data : [];
+      const data = getPageResult(
+        await apiRequest(
+          `/api/reports?page=${requestedPage}&limit=20&assigned_only=true`,
+        ),
+      );
+      const reports = data.items;
       setTasks(
         reports.filter(
           (report) => String(report.assigned_worker_id) === String(user?.id),
         ),
       );
+      setSummary(data.summary);
+      setPage(data.page);
+      setTotalPages(data.total_pages);
+      setTotalTasks(data.total);
       setError("");
     } catch (requestError) {
       setError(requestError.message);
@@ -96,47 +95,36 @@ export default function WorkerDashboard() {
   }, [user?.id]);
 
   useEffect(() => {
-    const initialRefresh = window.setTimeout(loadTasks, 0);
-    const refreshInterval = window.setInterval(loadTasks, 15000);
-    window.addEventListener("focus", loadTasks);
+    const initialRefresh = window.setTimeout(() => loadTasks(page), 0);
+    const refreshInterval = window.setInterval(() => loadTasks(page), 15000);
+    const refreshOnFocus = () => loadTasks(page);
+    window.addEventListener("focus", refreshOnFocus);
     return () => {
       window.clearTimeout(initialRefresh);
       window.clearInterval(refreshInterval);
-      window.removeEventListener("focus", loadTasks);
+      window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [loadTasks]);
+  }, [loadTasks, page]);
 
-  const positions = useMemo(
-    () => tasks.map(getCoordinates).filter((coordinates) => coordinates !== null),
-    [tasks],
-  );
-  const activeCount = tasks.filter((task) =>
-    ["assigned", "in_progress"].includes(getStatus(task)),
-  ).length;
-  const inProgressCount = tasks.filter(
-    (task) => getStatus(task) === "in_progress",
-  ).length;
-  const cleanedCount = tasks.filter((task) => getStatus(task) === "cleaned").length;
+  const activeCount = (summary?.assigned || 0) + (summary?.in_progress || 0);
+  const inProgressCount = summary?.in_progress || 0;
+  const cleanedCount = summary?.cleaned || 0;
   const chartSegments = useMemo(() => {
-    const counts = tasks.reduce((result, task) => {
-      const status = getStatus(task);
-      result[status] = (result[status] || 0) + 1;
-      return result;
-    }, {});
+    const counts = summary || {};
     return STATUS_CATEGORIES.map((category, index) => {
       const count = counts[category.key] || 0;
-      const length = tasks.length ? (count / tasks.length) * CHART_CIRCUMFERENCE : 0;
+      const length = totalTasks ? (count / totalTasks) * CHART_CIRCUMFERENCE : 0;
       const offset = STATUS_CATEGORIES.slice(0, index).reduce(
         (sum, previous) =>
           sum +
-          (tasks.length
-            ? ((counts[previous.key] || 0) / tasks.length) * CHART_CIRCUMFERENCE
+          (totalTasks
+            ? ((counts[previous.key] || 0) / totalTasks) * CHART_CIRCUMFERENCE
             : 0),
         0,
       );
       return { ...category, count, length, offset };
     });
-  }, [tasks]);
+  }, [summary, totalTasks]);
 
   const updateTaskStatus = async (task, status) => {
     setUpdatingId(task.id);
@@ -146,11 +134,24 @@ export default function WorkerDashboard() {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
+      const previousStatus = getStatus(task);
+      const updatedStatus = getStatus(updatedTask);
       setTasks((currentTasks) =>
         currentTasks.map((currentTask) =>
           currentTask.id === task.id ? updatedTask : currentTask,
         ),
       );
+      if (previousStatus !== updatedStatus) {
+        setSummary((currentSummary) =>
+          currentSummary
+            ? {
+                ...currentSummary,
+                [previousStatus]: Math.max(0, (currentSummary[previousStatus] || 0) - 1),
+                [updatedStatus]: (currentSummary[updatedStatus] || 0) + 1,
+              }
+            : currentSummary,
+        );
+      }
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -184,7 +185,10 @@ export default function WorkerDashboard() {
         </div>
         <button
           type="button"
-          onClick={loadTasks}
+          onClick={() => {
+            setLoading(true);
+            loadTasks(page);
+          }}
           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#0B4650] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#08353d]"
         >
           <RefreshCw className="h-4 w-4" />
@@ -206,7 +210,9 @@ export default function WorkerDashboard() {
               <Icon className="h-6 w-6" />
             </span>
             <div>
-              <p className="text-2xl font-extrabold text-gray-800">{value}</p>
+              <p className="text-2xl font-extrabold text-gray-800">
+                {loading ? <span className="inline-block h-7 w-12 animate-pulse rounded bg-gray-100" /> : value}
+              </p>
               <p className="text-xs font-medium text-gray-500">{label}</p>
             </div>
           </div>
@@ -223,34 +229,11 @@ export default function WorkerDashboard() {
             <MapPin className="h-5 w-5 text-[#159B43]" />
           </div>
           <div className="h-[320px]">
-            <MapContainer center={MAP_CENTER} zoom={12} className="h-full w-full">
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <FitMapToTasks positions={positions} />
-              {tasks.map((task) => {
-                const coordinates = getCoordinates(task);
-                if (!coordinates) return null;
-                return (
-                  <Marker key={task.id} position={coordinates}>
-                    <Popup>
-                      <div className="space-y-1">
-                        <strong>{getReferenceId(task)}</strong>
-                        <p>{task.remarks || task.description || "Cleanup location"}</p>
-                        <button
-                          type="button"
-                          className="font-semibold text-[#0B4650] underline"
-                          onClick={() => openInMaps(coordinates[0], coordinates[1])}
-                        >
-                          Open in Maps
-                        </button>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-            </MapContainer>
+            <LazyRender fallback={<div className="h-full animate-pulse bg-gray-100" />}>
+              <Suspense fallback={<div className="h-full animate-pulse bg-gray-100" />}>
+                <WorkerTasksMap tasks={tasks} />
+              </Suspense>
+            </LazyRender>
           </div>
         </div>
 
@@ -261,6 +244,7 @@ export default function WorkerDashboard() {
               <p className="text-xs text-gray-500">Assigned work progress</p>
             </div>
           </div>
+          <LazyRender fallback={<div className="h-56 animate-pulse rounded-xl bg-gray-100" />}>
           <div className="flex flex-col items-center gap-5 py-5 sm:flex-row sm:justify-center">
             <div className="relative h-48 w-48 shrink-0">
               <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
@@ -280,7 +264,7 @@ export default function WorkerDashboard() {
                 ))}
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-extrabold text-[#0B4650]">{tasks.length}</span>
+                <span className="text-3xl font-extrabold text-[#0B4650]">{totalTasks}</span>
                 <span className="text-xs text-gray-500">Tasks</span>
               </div>
             </div>
@@ -296,6 +280,7 @@ export default function WorkerDashboard() {
               ))}
             </ul>
           </div>
+          </LazyRender>
         </div>
       </section>
 
@@ -339,13 +324,6 @@ export default function WorkerDashboard() {
                     <tr key={task.id} className="text-gray-700 hover:bg-gray-50/70">
                       <td className="whitespace-nowrap px-4 py-4">
                         <div className="flex items-center gap-3">
-                          {task.image_url && (
-                            <img
-                              src={getImageUrl(task.image_url)}
-                              alt=""
-                              className="h-11 w-11 rounded-lg object-cover"
-                            />
-                          )}
                           <span className="font-bold text-[#0B4650]">{getReferenceId(task)}</span>
                         </div>
                       </td>
@@ -411,6 +389,15 @@ export default function WorkerDashboard() {
           </table>
         </div>
       </section>
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        total={totalTasks}
+        onPageChange={(nextPage) => {
+          setLoading(true);
+          setPage(nextPage);
+        }}
+      />
     </div>
   );
 }

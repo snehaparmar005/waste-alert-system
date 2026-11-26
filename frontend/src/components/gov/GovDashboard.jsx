@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -6,18 +6,12 @@ import {
   MapPin,
   Users,
 } from "lucide-react";
-import {
-  MapContainer,
-  Marker,
-  Popup,
-  TileLayer,
-  useMap,
-} from "react-leaflet";
-import { apiRequest, getSession } from "../../api/client";
-import { openInMaps } from "../../utils/openMap";
+import { apiRequest, getPageResult, getSession } from "../../api/client";
+import LazyRender from "../LazyRender";
+import PaginationControls from "../PaginationControls";
 
-const MAP_CENTER = [26.2183, 78.1828];
 const CHART_CIRCUMFERENCE = 2 * Math.PI * 40;
+const GovReportsMap = lazy(() => import("./GovReportsMap"));
 
 const STATUS_CATEGORIES = [
   { key: "submitted", label: "Submitted", color: "#94a3b8" },
@@ -33,112 +27,65 @@ const WASTE_CATEGORIES = [
   { key: "non_biodegradable", label: "Non-biodegradable", color: "#0B4650" },
   { key: "other", label: "Other", color: "#8b5cf6" },
 ];
-const WASTE_TYPE_LABELS = {
-  biodegradable: "Biodegradable",
-  hazardous: "Hazardous",
-  non_biodegradable: "Non-biodegradable",
-};
-
-function getReportStatus(report) {
-  const status = (report.status || "").toLowerCase();
-  return status === "reported" ? "submitted" : status;
-}
-
-function getReferenceId(report) {
-  return report.reference_id || `C2C-${String(report.id).padStart(3, "0")}`;
-}
-
-function getCategoryLabel(report) {
-  const slug = report.corrected_slug || report.category?.slug || report.waste_type;
-  return WASTE_TYPE_LABELS[slug] || report.category?.label || slug || "Uncategorized";
-}
-
-function getCoordinates(report) {
-  const latitude = Number(report.latitude);
-  const longitude = Number(report.longitude);
-  if (
-    report.latitude == null ||
-    report.longitude == null ||
-    !Number.isFinite(latitude) ||
-    !Number.isFinite(longitude) ||
-    latitude < -90 ||
-    latitude > 90 ||
-    longitude < -180 ||
-    longitude > 180 ||
-    (latitude === 0 && longitude === 0)
-  ) {
-    return null;
-  }
-  return [latitude, longitude];
-}
-
-function getStatusStyle(status) {
-  if (status === "submitted") return "bg-slate-100 text-slate-700";
-  if (status === "assigned") return "bg-amber-100 text-amber-800";
-  if (status === "cleaned") return "bg-emerald-100 text-emerald-700";
-  if (status === "in_progress") return "bg-blue-100 text-blue-800";
-  return "bg-gray-100 text-gray-700";
-}
-
-function FitMapToReports({ positions }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (positions.length === 1) {
-      map.setView(positions[0], 14);
-    } else if (positions.length > 1) {
-      map.fitBounds(positions, { padding: [24, 24], maxZoom: 14 });
-    }
-  }, [map, positions]);
-
-  return null;
-}
-
 export default function GovDashboard() {
   const [reports, setReports] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalReports, setTotalReports] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [chartType, setChartType] = useState("status");
   const user = getSession()?.user;
 
-  const loadReports = useCallback(async () => {
+  const loadReports = useCallback(async (requestedPage = 1) => {
     try {
-      const data = await apiRequest("/api/reports");
-      setReports(Array.isArray(data) ? data : []);
+      const data = getPageResult(
+        await apiRequest(`/api/reports?page=${requestedPage}&limit=20`),
+      );
+      setReports(data.items);
+      setSummary(data.summary);
+      setPage(data.page);
+      setTotalPages(data.total_pages);
+      setTotalReports(data.total);
       setError("");
     } catch (requestError) {
       setError(requestError.message);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const initialRefresh = window.setTimeout(loadReports, 0);
-    const refreshInterval = window.setInterval(loadReports, 15000);
-    window.addEventListener("focus", loadReports);
+    const initialRefresh = window.setTimeout(() => loadReports(page), 0);
+    const refreshInterval = window.setInterval(() => loadReports(page), 15000);
+    const refreshOnFocus = () => loadReports(page);
+    window.addEventListener("focus", refreshOnFocus);
     return () => {
       window.clearTimeout(initialRefresh);
       window.clearInterval(refreshInterval);
-      window.removeEventListener("focus", loadReports);
+      window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [loadReports]);
+  }, [loadReports, page]);
 
-  const total = reports.length;
-  const submitted = reports.filter((report) => getReportStatus(report) === "submitted").length;
-  const assigned = reports.filter((report) => getReportStatus(report) === "assigned").length;
-  const cleaned = reports.filter((report) => getReportStatus(report) === "cleaned").length;
-  const positions = useMemo(
-    () => reports.map(getCoordinates).filter((coordinates) => coordinates !== null),
-    [reports],
-  );
+  const total = summary?.total || totalReports;
+  const submitted = summary?.submitted || 0;
+  const assigned = summary?.assigned || 0;
+  const cleaned = summary?.cleaned || 0;
+  const geolocatedCount = reports.filter(
+    (report) =>
+      report.latitude != null &&
+      report.longitude != null &&
+      Number.isFinite(Number(report.latitude)) &&
+      Number.isFinite(Number(report.longitude)) &&
+      !(Number(report.latitude) === 0 && Number(report.longitude) === 0),
+  ).length;
   const chartCategories = chartType === "status" ? STATUS_CATEGORIES : WASTE_CATEGORIES;
   const chartSegments = useMemo(() => {
-    const counts = reports.reduce((result, report) => {
-      const key =
-        chartType === "status"
-          ? getReportStatus(report)
-          : report.corrected_slug || report.category?.slug || "other";
-      result[key] = (result[key] || 0) + 1;
-      return result;
-    }, {});
+    const counts =
+      chartType === "status"
+        ? summary || {}
+        : summary?.categories || {};
     return chartCategories.map((category, index) => {
       const count = counts[category.key] || 0;
       const length = total ? (count / total) * CHART_CIRCUMFERENCE : 0;
@@ -155,7 +102,7 @@ export default function GovDashboard() {
         );
       return { ...category, count, length, offset };
     });
-  }, [chartCategories, chartType, reports, total]);
+  }, [chartCategories, chartType, summary, total]);
 
   const stats = [
     { label: "Total Complaints", value: total, Icon: ClipboardList, color: "text-[#0B4650]", bg: "bg-[#EAF5EE]" },
@@ -196,13 +143,32 @@ export default function GovDashboard() {
         </Link>
       </header>
 
+      <section aria-label="Complaint totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map(({ label, value, Icon, color, bg }) => (
+          <div
+            key={label}
+            className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
+          >
+            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${bg} ${color}`}>
+              <Icon className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-extrabold text-gray-800">
+                {loading ? <span className="inline-block h-7 w-12 animate-pulse rounded bg-gray-100" /> : value}
+              </p>
+              <p className="text-xs font-medium text-gray-500">{label}</p>
+            </div>
+          </div>
+        ))}
+      </section>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="font-bold text-[#0B4650]">Live Complaint Map</h2>
               <p className="mt-1 text-xs text-gray-500">
-                {positions.length} geolocated complaints
+                {geolocatedCount} geolocated complaints on this page
               </p>
             </div>
             <Link
@@ -213,54 +179,21 @@ export default function GovDashboard() {
             </Link>
           </div>
           <div className="h-80 overflow-hidden rounded-xl border border-gray-200">
-            <MapContainer
-              center={MAP_CENTER}
-              zoom={12}
-              scrollWheelZoom
-              className="h-full w-full"
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <FitMapToReports positions={positions} />
-              {reports.map((report) => {
-                const coordinates = getCoordinates(report);
-                if (!coordinates) return null;
-                const status = getReportStatus(report);
-                return (
-                  <Marker key={report.id} position={coordinates}>
-                    <Popup>
-                      <div className="space-y-2 text-xs">
-                        <p className="font-bold text-[#0B4650]">
-                          {getReferenceId(report)} · {getCategoryLabel(report)}
-                        </p>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 font-semibold ${getStatusStyle(
-                            status,
-                          )}`}
-                        >
-                          {status.replaceAll("_", " ")}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openInMaps(coordinates[0], coordinates[1])
-                          }
-                          className="flex items-center gap-1 font-semibold text-[#159B43]"
-                        >
-                          <MapPin className="h-3.5 w-3.5" />
-                          Open in Maps
-                        </button>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-            </MapContainer>
+            <LazyRender fallback={<div className="h-full animate-pulse bg-gray-100" />}>
+              <Suspense fallback={<div className="h-full animate-pulse bg-gray-100" />}>
+                <GovReportsMap reports={reports} />
+              </Suspense>
+            </LazyRender>
           </div>
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            total={totalReports}
+            onPageChange={setPage}
+          />
         </section>
 
+        <LazyRender fallback={<div className="h-80 animate-pulse rounded-2xl bg-gray-100" />}>
         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -352,24 +285,9 @@ export default function GovDashboard() {
             </ul>
           </div>
         </section>
+        </LazyRender>
       </div>
 
-      <section aria-label="Complaint totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map(({ label, value, Icon, color, bg }) => (
-          <div
-            key={label}
-            className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
-          >
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${bg} ${color}`}>
-              <Icon className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-extrabold text-gray-800">{value}</p>
-              <p className="text-xs font-medium text-gray-500">{label}</p>
-            </div>
-          </div>
-        ))}
-      </section>
     </div>
   );
 }

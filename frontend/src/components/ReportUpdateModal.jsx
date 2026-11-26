@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   LoaderCircle,
@@ -67,6 +67,21 @@ export default function ReportUpdateModal({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [details, setDetails] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest(`/api/reports/${report.id}`)
+      .then((reportDetails) => {
+        if (active) setDetails(reportDetails);
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [report.id]);
 
   const handleSave = async (event) => {
     event.preventDefault();
@@ -96,7 +111,8 @@ export default function ReportUpdateModal({
     }
   };
 
-  const coordinates = getCoordinates(report);
+  const currentReport = details || report;
+  const coordinates = getCoordinates(currentReport);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -118,7 +134,7 @@ export default function ReportUpdateModal({
               Complaint details
             </p>
             <h2 id="complaint-modal-title" className="text-xl font-bold text-[#0B4650]">
-              {getReferenceId(report)}
+              {getReferenceId(currentReport)}
             </h2>
           </div>
           <button
@@ -142,20 +158,27 @@ export default function ReportUpdateModal({
           </div>
         )}
 
-        {report.image_url && (
+        {details?.image_url ? (
           <img
-            src={getImageUrl(report.image_url)}
-            alt={getCategoryLabel(report)}
+            src={getImageUrl(details.image_url)}
+            alt={getCategoryLabel(currentReport)}
+            loading="lazy"
+            width="560"
+            height="224"
             className="mb-5 h-56 w-full rounded-xl border border-gray-200 object-cover"
           />
-        )}
+        ) : !details ? (
+          <div className="mb-5 h-56 animate-pulse rounded-xl bg-gray-100" role="status">
+            Loading report details...
+          </div>
+        ) : null}
 
         <div className="mb-5 grid gap-3 rounded-xl bg-[#F4F7F6] p-4 sm:grid-cols-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Reference ID
             </p>
-            <p className="mt-1 font-bold text-[#0B4650]">{getReferenceId(report)}</p>
+            <p className="mt-1 font-bold text-[#0B4650]">{getReferenceId(currentReport)}</p>
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -168,7 +191,7 @@ export default function ReportUpdateModal({
                 className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-[#0B4650] hover:text-[#159B43]"
               >
                 <MapPin className="h-4 w-4" />
-                {report.latitude}, {report.longitude}
+                {currentReport.latitude}, {currentReport.longitude}
                 <MapPinned className="ml-1 h-4 w-4" />
               </button>
             ) : (
@@ -180,7 +203,7 @@ export default function ReportUpdateModal({
               Waste Type
             </p>
             <p className="mt-1 text-sm font-medium text-gray-800">
-              {getCategoryLabel(report)}
+              {getCategoryLabel(currentReport)}
             </p>
           </div>
           <div>
@@ -188,7 +211,7 @@ export default function ReportUpdateModal({
               Description
             </p>
             <p className="mt-1 text-sm text-gray-800">
-              {report.description || report.remarks || "No description"}
+              {currentReport.description || currentReport.remarks || "No description"}
             </p>
           </div>
         </div>
