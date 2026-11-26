@@ -71,7 +71,7 @@ export default function GovReportDetail() {
             </div>
           )}
 
-          <div className="h-44 w-full overflow-hidden rounded-xl border">
+          <div className="h-80 w-full overflow-hidden rounded-xl border">
             <MapContainer center={coords} zoom={15} style={{ height: "100%", width: "100%" }}>
               <MapResizeFix />
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />

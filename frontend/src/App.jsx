@@ -1,11 +1,9 @@
-import HomePage from "./components/HomePage";
 import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getSession } from "./api/client";
-import Home from "@/pages/Home.jsx";
-import Report from "@/pages/Report.jsx";
-import Admin from "@/pages/Admin.jsx";
 import AppShell from "./components/AppShell";
+import Navbar from "./components/Navbar";
+import HomePage from "./components/HomePage";
 import LoginCard from "./components/LoginCard";
 import RegisterCard from "./components/RegisterCard";
 import MyReportsTimeline from "./components/MyReportsTimeline";
@@ -39,20 +37,6 @@ function getHomePath(role) {
   return "/citizen/report";
 }
 
-function NotFound() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-ink">404</h1>
-        <p className="mt-3 text-lg text-body">That page doesn't exist.</p>
-        <Link to="/" className="mt-6 inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground">
-          Go home
-        </Link>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const [session, setSession] = useState(() => getSession());
   const user = session?.user || null;
@@ -78,70 +62,95 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <AppShell user={user} onLogout={handleLogout}>
+      <Navbar user={user} />
+      <div className={user ? "" : "page-bg min-h-screen"}>
         <Suspense fallback={<RouteLoading />}>
-        <Routes>
-          <Route
-            path="/"
-            element={user ? <Navigate to={getHomePath(user.role)} replace /> : <HomePage />}
-          />
-          <Route
-            path="/login"
-            element={user ? <Navigate to={getHomePath(user.role)} replace /> : <LoginCard onAuthSuccess={handleAuthSuccess} />}
-          />
-          <Route
-            path="/register"
-            element={user ? <Navigate to={getHomePath(user.role)} replace /> : <RegisterCard onAuthSuccess={handleAuthSuccess} />}
-          />
+          <Routes>
+            <Route
+              path="/"
+              element={user ? <Navigate to={getHomePath(user.role)} replace /> : <HomePage />}
+            />
+            <Route
+              path="/login"
+              element={user ? <Navigate to={getHomePath(user.role)} replace /> : <LoginCard onAuthSuccess={handleAuthSuccess} />}
+            />
+            <Route
+              path="/register"
+              element={user ? <Navigate to={getHomePath(user.role)} replace /> : <RegisterCard onAuthSuccess={handleAuthSuccess} />}
+            />
 
-      {/* Portal Auth */}
-      <Route
-        path="/login"
-        element={user ? <Navigate to={getHomePath(user.role)} replace /> : <LoginCard onAuthSuccess={handleAuthSuccess} />}
-      />
-      <Route
-        path="/register"
-        element={user ? <Navigate to={getHomePath(user.role)} replace /> : <RegisterCard onAuthSuccess={handleAuthSuccess} />}
-      />
+            <Route
+              path="/report"
+              element={
+                user?.role === "citizen"
+                  ? withShell(<ReportWaste />)
+                  : <Navigate to={user ? getHomePath(user.role) : "/login"} replace />
+              }
+            />
+            <Route
+              path="/citizen/report"
+              element={user?.role === "citizen" ? withShell(<ReportWaste />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/my-reports"
+              element={user?.role === "citizen" ? withShell(<MyReportsTimeline />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/profile"
+              element={user ? withShell(<UserProfile onProfileUpdate={handleProfileUpdate} />) : <Navigate to="/login" replace />}
+            />
 
-      {/* Citizen Portal */}
-      <Route
-        path="/citizen/report"
-        element={user?.role === "citizen" ? withShell(<ReportWaste />) : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/my-reports"
-        element={user?.role === "citizen" ? withShell(<MyReportsTimeline />) : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/profile"
-        element={user ? withShell(<UserProfile onProfileUpdate={handleProfileUpdate} />) : <Navigate to="/login" replace />}
-      />
+            <Route
+              path="/worker/dashboard"
+              element={user?.role === "worker" ? withShell(<WorkerDashboard />) : <Navigate to="/login" replace />}
+            />
 
-      {/* Worker Portal */}
-      <Route
-        path="/worker/dashboard"
-        element={user?.role === "worker" ? withShell(<WorkerDashboard />) : <Navigate to="/login" replace />}
-      />
+            <Route
+              path="/gov/dashboard"
+              element={user?.role === "gov" ? withShell(<GovDashboard />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/gov/reports"
+              element={user?.role === "gov" ? withShell(<GovReports />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/gov/workers"
+              element={user?.role === "gov" ? withShell(<GovWorkers />) : <Navigate to="/login" replace />}
+            />
 
-      {/* Gov (Nagar Nigam) Portal */}
-      <Route
-        path="/gov/dashboard"
-        element={user?.role === "gov" ? withShell(<GovDashboard />) : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/gov/reports"
-        element={user?.role === "gov" ? withShell(<GovReports />) : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/gov/workers"
-        element={user?.role === "gov" ? withShell(<GovWorkers />) : <Navigate to="/login" replace />}
-      />
+            <Route
+              path="/admin"
+              element={user?.role === "admin" ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/admin/dashboard"
+              element={user?.role === "admin" ? withShell(<AdminDashboard />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/admin/reports"
+              element={user?.role === "admin" ? withShell(<AdminReports />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/admin/users"
+              element={user?.role === "admin" ? withShell(<AdminUsers />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/admin/audit-logs"
+              element={user?.role === "admin" ? withShell(<AdminAuditLogs />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/admin/authorities"
+              element={user?.role === "admin" ? withShell(<AdminAuthorities />) : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/admin/alerts"
+              element={user?.role === "admin" ? withShell(<AdminAlerts />) : <Navigate to="/login" replace />}
+            />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </Suspense>
-      </AppShell>
+      </div>
     </BrowserRouter>
   );
 }

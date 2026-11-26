@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Bell,
   Camera,
@@ -89,7 +89,6 @@ export default function AppShell({ user, onLogout, children }) {
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
-  const { pathname } = useLocation();
   const navigate = useNavigate();
   const role = user?.role;
 
@@ -174,40 +173,7 @@ export default function AppShell({ user, onLogout, children }) {
     navigate("/login");
   };
 
-  if (!role) {
-    return (
-      <div className="page-bg flex min-h-screen flex-col font-sans text-body">
-        <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
-            <Link to="/" className="flex min-h-11 items-center gap-2">
-              <BrandLogo className="h-9 w-9" />
-              <span className="font-display text-xl font-extrabold text-ink">
-                Click-2-<span className="text-primary">Clean</span>
-              </span>
-            </Link>
-            <div className="flex items-center gap-3 text-sm font-semibold">
-              {pathname !== "/" && (
-                <Link to="/" className="flex min-h-11 items-center gap-1 text-ink hover:text-primary">
-                  <ArrowLeft className="h-4 w-4" />
-                  Home
-                </Link>
-              )}
-              <Link to="/login" className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-card px-5 py-2 text-ink hover:bg-tint">
-                Login
-              </Link>
-              <Link
-                to="/register"
-                className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-accent px-5 py-2 text-ink shadow-[3px_3px_0_var(--ink)] transition hover:-translate-y-0.5"
-              >
-                Register
-              </Link>
-            </div>
-          </div>
-        </header>
-        <main className="dots-mint flex-grow">{children}</main>
-      </div>
-    );
-  }
+  if (!role) return <>{children}</>;
 
   const links = navItemsByRole[role] || [];
   const name = user?.name?.trim() || "User";

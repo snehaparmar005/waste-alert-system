@@ -484,7 +484,7 @@ export default function ReportWaste() {
             </button>
           </div>
 
-          <div className="h-72 w-full overflow-hidden rounded-xl border border-gray-200">
+          <div className="h-80 w-full overflow-hidden rounded-xl border border-gray-200">
             <MapContainer
               center={DEFAULT_CENTER}
               zoom={position ? 15 : 12}

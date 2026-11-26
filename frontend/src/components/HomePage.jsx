@@ -1,6 +1,9 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { getSession } from "../api/client";
 
 export default function HomePage() {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-[85vh] bg-gray-50 flex flex-col justify-center items-center text-center px-4">
       <span className="bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1 rounded-full mb-4">
@@ -14,12 +17,13 @@ export default function HomePage() {
       </p>
 
       <div className="mt-8 flex flex-wrap justify-center gap-4">
-        <Link
-          to="/report"
+        <button
+          type="button"
+          onClick={() => navigate(getSession()?.user ? "/report" : "/login")}
           className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-semibold shadow"
         >
           Report Waste Now
-        </Link>
+        </button>
         <Link
           to="/login"
           className="bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 px-6 py-3 rounded-xl font-semibold"
