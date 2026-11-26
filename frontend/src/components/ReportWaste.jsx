@@ -23,6 +23,7 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { apiRequest } from "../api/client";
+import MapResizeFix from "./MapResizeFix";
 
 const DEFAULT_CENTER = [26.2183, 78.1828];
 
@@ -483,13 +484,14 @@ export default function ReportWaste() {
             </button>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-gray-200">
+          <div className="h-72 w-full overflow-hidden rounded-xl border border-gray-200">
             <MapContainer
               center={DEFAULT_CENTER}
               zoom={position ? 15 : 12}
               scrollWheelZoom
-              className="h-72 w-full"
+              className="h-full w-full"
             >
+              <MapResizeFix />
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

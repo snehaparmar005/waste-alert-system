@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { MapPin } from "lucide-react";
 import { openInMaps } from "../../utils/openMap";
+import MapResizeFix from "../MapResizeFix";
 
 const MAP_CENTER = [26.2183, 78.1828];
 
@@ -55,6 +56,7 @@ export default function GovReportsMap({ reports }) {
 
   return (
     <MapContainer center={MAP_CENTER} zoom={12} scrollWheelZoom className="h-full w-full">
+      <MapResizeFix />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, MapPin } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { getToken, setToken, login, listReports, getStats, updateStatus, photoUrl } from "@/lib/api";
@@ -15,6 +15,8 @@ const field = "min-h-11 rounded-xl border-2 border-ink bg-card px-3 text-ink";
 const btn = "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-6 py-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 function Shell({ children, right }) {
+  const { pathname } = useLocation();
+
   return (
     <div className="page-bg min-h-screen font-sans text-body">
       <header className="border-b border-border bg-background/90">
@@ -23,7 +25,15 @@ function Shell({ children, right }) {
             <img src={logo} alt="" width={36} height={36} className="h-9 w-9 object-contain" />
             <span className="font-display text-xl font-extrabold text-ink">Click-2-<span className="text-primary">Clean</span></span>
           </Link>
-          <div className="flex items-center gap-3">{right}<Link to="/" className="flex min-h-11 items-center gap-1 text-ink hover:text-primary"><ArrowLeft className="h-4 w-4" />Home</Link></div>
+          <div className="flex items-center gap-3">
+            {right}
+            {pathname !== "/" && (
+              <Link to="/" className="flex min-h-11 items-center gap-1 text-ink hover:text-primary">
+                <ArrowLeft className="h-4 w-4" />
+                Home
+              </Link>
+            )}
+          </div>
         </div>
       </header>
       <main className="dots-mint py-10"><div className="mx-auto max-w-6xl px-4">{children}</div></main>

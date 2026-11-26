@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import logo from "@/assets/logo.png";
 import { apiRequest } from "../api/client";
 
 const field = "min-h-11 w-full rounded-xl border-2 border-ink bg-card px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ring";
@@ -31,22 +29,7 @@ export default function RegisterCard() {
   };
 
   return (
-    <div className="page-bg min-h-screen font-sans text-body">
-      <header className="border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
-          <Link to="/" className="flex min-h-11 items-center gap-2">
-            <img src={logo} alt="Click-2-Clean logo" width={36} height={36} className="h-9 w-9 object-contain" />
-            <span className="font-display text-xl font-extrabold text-ink">
-              Click-2-<span className="text-primary">Clean</span>
-            </span>
-          </Link>
-          <Link to="/" className="flex min-h-11 items-center gap-1 font-medium text-ink hover:text-primary">
-            <ArrowLeft className="h-4 w-4" />
-            Home
-          </Link>
-        </div>
-      </header>
-
+    <div className="font-sans text-body">
       <main className="dots-mint flex min-h-[calc(100vh-61px)] items-center justify-center px-4 py-10">
         <div className="card-c w-full max-w-md p-6 md:p-8">
           <div className="mb-6 text-center">

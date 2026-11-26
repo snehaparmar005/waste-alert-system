@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Camera, MapPin, CheckCircle2, ArrowLeft } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { submitReport } from "@/lib/api";
@@ -18,6 +18,7 @@ const primary = `${btn} border-2 border-ink bg-accent text-ink shadow-[4px_4px_0
 const outline = `${btn} border-2 border-ink bg-card text-ink hover:bg-tint`;
 
 export default function Report() {
+  const { pathname } = useLocation();
   const fileRef = useRef(null);
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
@@ -79,7 +80,12 @@ export default function Report() {
             <img src={logo} alt="" width={36} height={36} className="h-9 w-9 object-contain" />
             <span className="font-display text-xl font-extrabold text-ink">Click-2-<span className="text-primary">Clean</span></span>
           </Link>
-          <Link to="/" className="flex min-h-11 items-center gap-1 text-ink hover:text-primary"><ArrowLeft className="h-4 w-4" />Home</Link>
+          {pathname !== "/" && (
+            <Link to="/" className="flex min-h-11 items-center gap-1 text-ink hover:text-primary">
+              <ArrowLeft className="h-4 w-4" />
+              Home
+            </Link>
+          )}
         </div>
       </header>
 

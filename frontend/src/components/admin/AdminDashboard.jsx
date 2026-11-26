@@ -156,7 +156,7 @@ export default function AdminDashboard() {
               <span className="inline-flex items-center gap-1">View All <ArrowRight className="h-3.5 w-3.5" /></span>
             </Link>
           </div>
-          <div className="h-72 overflow-hidden rounded-xl border border-gray-200">
+          <div className="h-72 w-full overflow-hidden rounded-xl border border-gray-200">
             <LazyRender fallback={<div className="h-full animate-pulse bg-gray-100" />}>
               <Suspense fallback={<div className="h-full animate-pulse bg-gray-100" />}>
                 <AdminReportsMap reports={mapReports} />

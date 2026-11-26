@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
   Camera,
@@ -89,6 +89,7 @@ export default function AppShell({ user, onLogout, children }) {
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
+  const { pathname } = useLocation();
   const navigate = useNavigate();
   const role = user?.role;
 
@@ -185,10 +186,12 @@ export default function AppShell({ user, onLogout, children }) {
               </span>
             </Link>
             <div className="flex items-center gap-3 text-sm font-semibold">
-              <Link to="/" className="flex min-h-11 items-center gap-1 text-ink hover:text-primary">
-                <ArrowLeft className="h-4 w-4" />
-                Home
-              </Link>
+              {pathname !== "/" && (
+                <Link to="/" className="flex min-h-11 items-center gap-1 text-ink hover:text-primary">
+                  <ArrowLeft className="h-4 w-4" />
+                  Home
+                </Link>
+              )}
               <Link to="/login" className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-card px-5 py-2 text-ink hover:bg-tint">
                 Login
               </Link>

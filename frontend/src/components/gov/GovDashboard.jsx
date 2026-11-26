@@ -178,7 +178,7 @@ export default function GovDashboard() {
               View all
             </Link>
           </div>
-          <div className="h-80 overflow-hidden rounded-xl border border-gray-200">
+          <div className="h-80 w-full overflow-hidden rounded-xl border border-gray-200">
             <LazyRender fallback={<div className="h-full animate-pulse bg-gray-100" />}>
               <Suspense fallback={<div className="h-full animate-pulse bg-gray-100" />}>
                 <GovReportsMap reports={reports} />

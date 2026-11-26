@@ -228,7 +228,7 @@ export default function WorkerDashboard() {
             </div>
             <MapPin className="h-5 w-5 text-[#159B43]" />
           </div>
-          <div className="h-[320px]">
+          <div className="h-[320px] w-full overflow-hidden rounded-xl">
             <LazyRender fallback={<div className="h-full animate-pulse bg-gray-100" />}>
               <Suspense fallback={<div className="h-full animate-pulse bg-gray-100" />}>
                 <WorkerTasksMap tasks={tasks} />

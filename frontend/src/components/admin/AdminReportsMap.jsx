@@ -1,5 +1,6 @@
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import { openInMaps } from "../../utils/openMap";
+import MapResizeFix from "../MapResizeFix";
 
 function getCoordinates(report) {
   const latitude = Number(report.latitude);
@@ -37,6 +38,7 @@ function getStatus(report) {
 export default function AdminReportsMap({ reports }) {
   return (
     <MapContainer center={[26.2183, 78.1828]} zoom={13} className="h-full w-full">
+      <MapResizeFix />
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       {reports.map((report) => {
         const coordinates = getCoordinates(report);
