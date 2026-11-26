@@ -10,7 +10,6 @@ import {
   Send,
   Sparkles,
 } from "lucide-react";
-import L from "leaflet";
 import {
   MapContainer,
   Marker,
@@ -19,20 +18,11 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { apiRequest } from "../api/client";
+import { cleanPinIcon } from "../utils/leafletIcon";
 import MapResizeFix from "./MapResizeFix";
 
 const DEFAULT_CENTER = [26.2183, 78.1828];
-
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
 
 function getDistanceInMeters(first, second) {
   const earthRadius = 6371000;
@@ -79,6 +69,7 @@ function LocationMarker({ position, onPositionChange }) {
     <Marker
       ref={markerRef}
       position={position}
+      icon={cleanPinIcon}
       draggable
       eventHandlers={{ dragend: handleDragEnd }}
     >

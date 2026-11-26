@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { openInMaps } from "../../utils/openMap";
+import { cleanPinIcon } from "../../utils/leafletIcon";
 import MapResizeFix from "../MapResizeFix";
 
 const MAP_CENTER = [26.2183, 78.1828];
@@ -51,7 +52,7 @@ export default function WorkerTasksMap({ tasks }) {
         const coordinates = getCoordinates(task);
         if (!coordinates) return null;
         return (
-          <Marker key={task.id} position={coordinates}>
+          <Marker key={task.id} position={coordinates} icon={cleanPinIcon}>
             <Popup>
               <div className="space-y-1">
                 <strong>{task.reference_id || `C2C-${String(task.id).padStart(3, "0")}`}</strong>

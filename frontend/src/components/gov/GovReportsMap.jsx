@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { MapPin } from "lucide-react";
 import { openInMaps } from "../../utils/openMap";
+import { cleanPinIcon } from "../../utils/leafletIcon";
 import MapResizeFix from "../MapResizeFix";
 
 const MAP_CENTER = [26.2183, 78.1828];
@@ -67,7 +68,7 @@ export default function GovReportsMap({ reports }) {
         if (!coordinates) return null;
         const status = getStatus(report);
         return (
-          <Marker key={report.id} position={coordinates}>
+          <Marker key={report.id} position={coordinates} icon={cleanPinIcon}>
             <Popup>
               <div className="space-y-2 text-xs">
                 <p className="font-bold text-[#0B4650]">

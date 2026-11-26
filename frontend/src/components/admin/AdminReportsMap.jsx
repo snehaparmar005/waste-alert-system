@@ -1,5 +1,6 @@
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import { openInMaps } from "../../utils/openMap";
+import { cleanPinIcon } from "../../utils/leafletIcon";
 import MapResizeFix from "../MapResizeFix";
 
 function getCoordinates(report) {
@@ -44,7 +45,7 @@ export default function AdminReportsMap({ reports }) {
         const coordinates = getCoordinates(report);
         if (!coordinates) return null;
         return (
-          <Marker key={report.id} position={coordinates}>
+          <Marker key={report.id} position={coordinates} icon={cleanPinIcon}>
             <Popup>
               <div className="space-y-1 text-xs">
                 <p className="font-bold">

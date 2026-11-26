@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import { apiRequest, getPageResult } from "../../api/client";
+import { cleanPinIcon } from "../../utils/leafletIcon";
 import MapResizeFix from "../MapResizeFix";
 
 export default function GovReportDetail() {
@@ -75,7 +76,7 @@ export default function GovReportDetail() {
             <MapContainer center={coords} zoom={15} style={{ height: "100%", width: "100%" }}>
               <MapResizeFix />
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <Marker position={coords} />
+              <Marker position={coords} icon={cleanPinIcon} />
             </MapContainer>
           </div>
         </div>
