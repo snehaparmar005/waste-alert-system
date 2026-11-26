@@ -1,40 +1,39 @@
-# ♻️ Click-2-Clean — Smart Community Waste Management Platform
+# Click-2-Clean (React + FastAPI + MySQL, JavaScript)
 
-**Click-2-Clean** is a full-stack web application that empowers citizens to report street waste with photo evidence and live GPS coordinates, enabling **Nagar Nigam (Municipal)** teams and **System Administrators** to track, assign, and resolve cleanup operations efficiently.
+Converted from the Lovable project (TanStack Start + TypeScript) to:
 
----
+- **frontend/**: React 19 + Vite, plain JavaScript (`.jsx`), Tailwind 4, GSAP, Three.js
+- **backend/**: FastAPI + SQLAlchemy + MySQL
 
-## 🚀 Key Features by Role
+The landing page is the same design as in Lovable. Lovable's version had no backend
+(the Report Waste and Admin Login buttons pointed nowhere), so this package adds a
+small working one: a report form, an admin login and an admin list.
 
-### 🌐 Public Access
-* **Landing Page**: Project overview and quick navigation to report waste or sign in.
-* **Unified Authentication**: Role-based login and citizen registration with automatic dashboard routing.
+## What was changed
 
-### 👤 Citizen Role
-* **Report Waste**: Upload waste photos, select waste category & ward, capture live GPS coordinates, and submit complaints.
-* **My Reports Timeline**: Real-time tracking of submitted reports (*Pending*, *Assigned*, *Cleaned*) with a detailed inspection modal.
-* **Profile Management**: Update display name and account password.
+| Lovable | Now |
+|---|---|
+| TanStack Start, SSR, Cloudflare/Nitro build | Vite SPA + React Router |
+| `.ts` / `.tsx` | `.js` / `.jsx` (types removed) |
+| 45 unused shadcn components | removed (only `accordion` is used) |
+| `*.asset.json` pointers to Lovable servers | plain files in `frontend/public/images/` |
+| Report Waste / Admin Login = `#` | `/report` and `/admin` pages talking to FastAPI |
+| Lovable error reporting, tests, build scripts | removed |
 
-### 🏛️ Government Role (Nagar Nigam)
-* **Live Area Dashboard**: Summary metrics and an interactive **Leaflet** map displaying pinned waste locations.
-* **Area Reports Table**: Searchable and filterable list of municipal complaints by category and status.
-* **Report Action View**: View uploaded waste evidence on a map and update cleanup status to **Assigned** or **Cleaned**.
+## 1. Photos
 
-### 🛡️ Admin Role
-* **Master Control Center**: City-wide cleanup statistics and a master ward map.
-* **System Reports Manager**: Full oversight to edit statuses or remove invalid reports.
-* **User & Officer Management**: Add accounts, remove users, or change access roles (`Citizen`, `Gov`, `Admin`).
-* **Ward & Alert Contacts**: Configure municipal wards with official emails and Telegram alert handles.
-* **Alert Delivery Logs**: Audit trail of automated notifications sent to ward authorities.
+The ZIP from Lovable did not contain your photos. Copy them into
+`frontend/public/images/` using the names listed in `frontend/public/images/README.txt`.
 
----
+## 2. Database (MySQL 8)
 
-## 🛠️ Tech Stack
-* **Frontend**: React, Vite, Tailwind CSS, React Router, React Leaflet
-* **Backend**: Python, FastAPI, Uvicorn, Pydantic
-* **Database & Storage**: SQLite (`click2clean.db`), Local Static File Storage (`/uploads`)
+```sql
+CREATE DATABASE click2clean CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'c2c_user'@'localhost' IDENTIFIED BY 'choose-a-strong-password';
+GRANT ALL PRIVILEGES ON click2clean.* TO 'c2c_user'@'localhost';
+```
 
----
+Tables are created automatically when the API starts (`backend/schema.sql` shows them).
 
 ## Reports API performance
 
@@ -49,31 +48,58 @@ invalidate it immediately. New report images are stored as WebP at up to 480x480
 
 ## ⚙️ How to Run Locally
 
-### 1. Start the Backend (FastAPI)
 ```bash
 cd backend
-.\venv\Scripts\Activate.ps1
-python -m uvicorn main:app --reload
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env               # Windows: copy .env.example .env
 ```
-*Backend runs at: `http://127.0.0.1:8000`*
 
-### 2. Start the Frontend (React + Vite)
-Open a second terminal:
+Edit `.env`: set `DATABASE_URL`, a long random `JWT_SECRET`, and `ADMIN_PASSWORD`
+(10+ characters). Then:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+API docs: http://127.0.0.1:8000/docs. Needs Python 3.10 or newer.
+
+## 4. Frontend
+
 ```bash
 cd frontend
 npm install
 npm run dev
-
 ```
-*Frontend runs at: `http://localhost:5173`*
 
----
+Open http://localhost:5173. In development, Vite forwards `/api` and `/uploads` to
+FastAPI on port 8000, so no extra CORS setup is needed. Needs Node 20.19+ (or 22).
 
-## 🔑 Demo Login Credentials
-*(Password for all demo accounts: **`password123`**)*
+For production, build with `VITE_API_URL=https://your-api-domain npm run build`, serve
+`frontend/dist` as static files, and add that site's address to `CORS_ORIGINS`.
+Because this is a single-page app, the host must send unknown paths (like `/report`)
+to `index.html`.
 
-| Role | Email |
-| :--- | :--- |
-| **Citizen** | `citizen@test.com` |
-| **Nagar Nigam Officer** | `officer@nagarnigam.gov.in` |
-| **System Admin** | `admin@nagarnigam.gov.in` |
+## API
+
+| Method | Path | Who | What |
+|---|---|---|---|
+| POST | `/api/reports` | public | multipart: `photo`, `category` (wet/dry/hazardous/other), `note`, `latitude`, `longitude` |
+| GET | `/api/reports/track/{code}` | public | status of one report by its tracking code |
+| POST | `/api/auth/login` | public | `{username, password}` gives a JWT |
+| GET | `/api/admin/reports` | admin | list, optional `status`, `category`, `limit`, `offset` |
+| GET | `/api/admin/stats` | admin | counts by status and category |
+| PATCH | `/api/admin/reports/{id}` | admin | `{status}`: reported / in_progress / resolved |
+
+## Things to know
+
+- **No AI sorting exists yet.** The landing page text says the AI identifies the waste
+  type, but neither the Lovable project nor this one contains a classifier: the user
+  picks the category on the report form. Either add one (for example a `/api/classify`
+  endpoint) or reword the copy in `frontend/src/content/landing.js` and
+  `frontend/src/components/landing/Phone.jsx`.
+- Report photos are saved on the backend's disk (`backend/uploads/`). Back that folder up.
+- Admin accounts: only the one from `.env` is created. Add more by inserting rows into
+  `admin_users` with a hash from `app.security.hash_password`.
+- The login attempt limiter is in memory and per process.

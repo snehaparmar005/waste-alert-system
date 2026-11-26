@@ -8,6 +8,9 @@
       "source": "/uploads/(.*)",
       "destination": "https://click-2-clean-ap.onrender.com/uploads/$1"
     },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }

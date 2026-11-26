@@ -17,8 +17,10 @@ import {
   User,
   Users,
   X,
+  ArrowLeft,
 } from "lucide-react";
 import { apiRequest, clearSession } from "../api/client";
+import logo from "@/assets/logo.png";
 
 function formatNotificationTimestamp(value) {
   if (!value) return "";
@@ -31,44 +33,15 @@ function formatNotificationTimestamp(value) {
       });
 }
 
-function BrandLogo({ className = "h-10 w-10" }) {
+function BrandLogo({ className = "h-9 w-9" }) {
   return (
-    <svg
-      xmlns="http://w3.org"
-      viewBox="0 0 200 210"
-      className={`${className} shrink-0 rounded-xl bg-white p-1`}
-    >
-      <path
-        d="M 65 162 A 42 15 0 1 0 135 162"
-        fill="none"
-        stroke="#159B43"
-        strokeWidth="11"
-        strokeLinecap="round"
-      />
-      <path
-        d="M 100 42 C 66 42 39 69 39 103 C 39 144 100 182 100 182 C 100 182 161 144 161 103 C 161 69 134 42 100 42 Z"
-        fill="#0B4650"
-      />
-      <circle cx="100" cy="102" r="35" fill="#FFFFFF" />
-      <circle cx="100" cy="102" r="26" fill="#0B4650" />
-      <circle cx="91" cy="94" r="7" fill="#FFFFFF" />
-      <path
-        d="M 80 104 A 20 20 0 0 1 98 83"
-        fill="none"
-        stroke="#FFFFFF"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-      />
-      <circle cx="111" cy="110" r="4.5" fill="#F8C31C" />
-      <path
-        d="M 103 44 C 101 20 120 5 148 6 C 147 32 131 46 108 45 C 117 34 127 25 137 18 C 125 23 113 33 103 44 Z"
-        fill="#159B43"
-      />
-      <path
-        d="M 122 50 C 134 35 152 31 168 37 C 161 53 145 59 125 53 C 136 49 146 45 156 42 C 145 43 133 46 122 50 Z"
-        fill="#159B43"
-      />
-    </svg>
+    <img
+      src={logo}
+      alt="Click-2-Clean logo"
+      width={36}
+      height={36}
+      className={`${className} shrink-0 object-contain`}
+    />
   );
 }
 
@@ -81,7 +54,7 @@ const ROLE_LABELS = {
 
 const navItemsByRole = {
   citizen: [
-    { to: "/report", label: "Report Waste", Icon: Camera },
+    { to: "/citizen/report", label: "Report Waste", Icon: Camera },
     { to: "/my-reports", label: "My Reports", Icon: FileText },
     { to: "/profile", label: "My Profile", Icon: User },
   ],
@@ -202,35 +175,33 @@ export default function AppShell({ user, onLogout, children }) {
 
   if (!role) {
     return (
-      <div className="flex min-h-screen flex-col bg-[#F4F7F6] text-[#172B27]">
-        <header className="sticky top-0 z-30 flex items-center justify-between bg-[#0B4650] px-6 py-3.5 text-white shadow-sm">
-          <Link to="/" className="flex items-center gap-3">
-            <BrandLogo className="h-10 w-10" />
-            <div>
-              <span className="font-brand block text-xl font-extrabold leading-none">
-                Click-<span className="text-[#F8C31C]">2</span>-Clean
+      <div className="page-bg flex min-h-screen flex-col font-sans text-body">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
+            <Link to="/" className="flex min-h-11 items-center gap-2">
+              <BrandLogo className="h-9 w-9" />
+              <span className="font-display text-xl font-extrabold text-ink">
+                Click-2-<span className="text-primary">Clean</span>
               </span>
-              <span className="text-[11px] uppercase tracking-widest text-emerald-200">
-                Snap. Sort. Alert.
-              </span>
+            </Link>
+            <div className="flex items-center gap-3 text-sm font-semibold">
+              <Link to="/" className="flex min-h-11 items-center gap-1 text-ink hover:text-primary">
+                <ArrowLeft className="h-4 w-4" />
+                Home
+              </Link>
+              <Link to="/login" className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-card px-5 py-2 text-ink hover:bg-tint">
+                Login
+              </Link>
+              <Link
+                to="/register"
+                className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-accent px-5 py-2 text-ink shadow-[3px_3px_0_var(--ink)] transition hover:-translate-y-0.5"
+              >
+                Register
+              </Link>
             </div>
-          </Link>
-          <div className="flex items-center gap-4 text-sm font-medium">
-            <Link to="/" className="hover:text-[#F8C31C]">
-              Home
-            </Link>
-            <Link to="/login" className="hover:text-[#F8C31C]">
-              Login
-            </Link>
-            <Link
-              to="/register"
-              className="rounded-lg bg-[#159B43] px-4 py-2 font-semibold text-white hover:bg-[#118037]"
-            >
-              Register
-            </Link>
           </div>
         </header>
-        <main className="flex-grow">{children}</main>
+        <main className="dots-mint flex-grow">{children}</main>
       </div>
     );
   }
@@ -245,55 +216,55 @@ export default function AppShell({ user, onLogout, children }) {
     .toUpperCase();
 
   return (
-    <div className="h-screen overflow-hidden bg-[#F4F7F6] text-[#172B27]">
+    <div className="page-bg h-screen overflow-hidden font-sans text-body">
       {sidebarOpen && (
         <button
           type="button"
           aria-label="Close navigation menu"
           onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-30 cursor-default bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 cursor-default bg-black/40 backdrop-blur-xs lg:hidden"
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col justify-between bg-[#0B4650] text-white transition-transform duration-200 lg:fixed lg:inset-y-0 lg:left-0 lg:w-64 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col justify-between border-r border-border bg-background text-ink transition-transform duration-200 lg:fixed lg:inset-y-0 lg:left-0 lg:w-64 lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="overflow-y-auto">
-          <div className="flex items-center justify-between gap-2 border-b border-white/10 p-5">
-            <div className="flex items-center gap-3">
-              <BrandLogo className="h-10 w-10" />
+          <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+            <Link to="/" className="flex min-h-11 items-center gap-2">
+              <BrandLogo className="h-9 w-9" />
               <div>
-                <span className="font-brand block text-lg font-extrabold leading-tight tracking-tight">
-                  Click-<span className="text-[#F8C31C]">2</span>-Clean
+                <span className="font-display block text-xl font-extrabold leading-tight text-ink">
+                  Click-2-<span className="text-primary">Clean</span>
                 </span>
-                <span className="text-[11px] tracking-wide text-emerald-200">
-                  Snap. Sort. Alert.
+                <span className="font-hand text-sm font-semibold text-bio-ink">
+                  snap. sort. alert.
                 </span>
               </div>
-            </div>
+            </Link>
             <button
               type="button"
               onClick={() => setSidebarOpen(false)}
               aria-label="Close sidebar"
-              className="rounded-lg p-1.5 text-white/80 hover:bg-white/10 hover:text-white lg:hidden"
+              className="rounded-full p-2 text-ink hover:bg-tint lg:hidden"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          <nav aria-label="Main navigation" className="space-y-1.5 p-4 text-sm font-medium">
+          <nav aria-label="Main navigation" className="space-y-2 p-4 text-sm font-semibold">
             {links.map(({ to, label, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-xl px-4 py-3 transition ${
+                  `flex items-center gap-3 rounded-full px-4 py-2.5 transition ${
                     isActive
-                      ? "bg-[#159B43] font-semibold text-white shadow-sm"
-                      : "text-white/80 hover:bg-white/10 hover:text-white"
+                      ? "border-2 border-ink bg-accent text-ink shadow-[3px_3px_0_var(--ink)]"
+                      : "text-body hover:bg-tint hover:text-ink"
                   }`
                 }
               >
@@ -304,15 +275,18 @@ export default function AppShell({ user, onLogout, children }) {
           </nav>
         </div>
 
-        <div className="space-y-3 border-t border-white/10 p-4">
-          <div className="rounded-xl bg-white/5 p-3 text-center">
-            <p className="text-xs font-semibold text-emerald-200">Cleaner City</p>
-            <p className="text-xs text-white/70">Greener Tomorrow</p>
-          </div>
+        <div className="space-y-3 border-t border-border p-4">
+          <Link
+            to="/"
+            className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-card py-2 text-xs font-semibold text-ink transition hover:bg-tint"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>Back to Home</span>
+          </Link>
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/90 py-2.5 text-xs font-semibold text-white transition hover:bg-red-600"
+            className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-hazard/10 py-2 text-xs font-semibold text-hazard-ink transition hover:bg-hazard hover:text-primary-foreground"
           >
             <LogOut className="h-4 w-4" />
             <span>Sign Out</span>
@@ -321,19 +295,19 @@ export default function AppShell({ user, onLogout, children }) {
       </aside>
 
       <div className="flex h-full min-h-0 flex-col lg:pl-64">
-        <header className="z-20 flex shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
+        <header className="z-20 flex shrink-0 items-center justify-between gap-4 border-b border-border bg-background/90 px-4 py-2.5 backdrop-blur sm:px-6">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
             aria-expanded={sidebarOpen}
-            className="rounded-lg border border-gray-200 p-2 text-gray-700 hover:bg-gray-50 lg:hidden"
+            className="rounded-full border-2 border-ink bg-card p-2 text-ink hover:bg-tint lg:hidden"
           >
             <Menu className="h-5 w-5" />
           </button>
 
           <div className="hidden sm:block">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            <span className="sticker text-xs">
               {ROLE_LABELS[role] || "Portal"}
             </span>
           </div>
@@ -349,11 +323,11 @@ export default function AppShell({ user, onLogout, children }) {
                 aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
                 aria-expanded={notificationsOpen}
                 aria-controls="navbar-notifications"
-                className="relative rounded-xl border border-gray-200 p-2 text-gray-600 transition hover:bg-gray-50"
+                className="relative rounded-full border-2 border-ink bg-card p-2 text-ink transition hover:bg-tint"
               >
                 <Bell className="h-5 w-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-amber-300">
+                  <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full border border-ink bg-accent px-1 text-[10px] font-bold leading-none text-ink">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
@@ -488,7 +462,7 @@ export default function AppShell({ user, onLogout, children }) {
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        <main className="dots-mint portal-theme min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

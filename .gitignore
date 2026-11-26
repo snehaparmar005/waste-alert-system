@@ -1,43 +1,16 @@
-﻿# Environment variables
-.env
-.env.*
-!.env.example
-
-# Python virtual environment
-venv/
-backend/venv/
-env/
-.venv/
-ENV/
-
-# Python bytecode and cache
-__pycache__/
-*.py[cod]
-*.class
-*.pyd
-
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
-
-# Operating system files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# IDE and Editor settings
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
 node_modules
 dist
 .env
-venv
 .venv
 __pycache__
+backend/uploads
+*.log
+.env
+**/.env
+venv/
+venv312/
+**/venv/
+**/venv312/
+_pycache_/
 *.pyc
-*.db
-backend/uploads/*
-!backend/uploads/.gitkeep
+**/received_photos/
