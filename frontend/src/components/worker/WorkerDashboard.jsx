@@ -59,11 +59,10 @@ function getStatusStyle(status) {
 }
 
 export default function WorkerDashboard() {
-  const [tasks, setTasks] = useState([]);
-  const [summary, setSummary] = useState(null);
+  const [myTasks, setMyTasks] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [totalTasks, setTotalTasks] = useState(0);
+  const [totalReports, setTotalReports] = useState(0);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [error, setError] = useState("");
@@ -77,15 +76,18 @@ export default function WorkerDashboard() {
         ),
       );
       const reports = data.items;
-      setTasks(
+      setMyTasks(
         reports.filter(
-          (report) => String(report.assigned_worker_id) === String(user?.id),
+          (report) =>
+            (report.assigned_worker_id != null &&
+              Number(report.assigned_worker_id) === Number(user?.id)) ||
+            (report.assigned_worker_id == null &&
+              ["assigned", "in_progress"].includes(getStatus(report))),
         ),
       );
-      setSummary(data.summary);
       setPage(data.page);
       setTotalPages(data.total_pages);
-      setTotalTasks(data.total);
+      setTotalReports(data.total);
       setError("");
     } catch (requestError) {
       setError(requestError.message);
@@ -106,6 +108,19 @@ export default function WorkerDashboard() {
     };
   }, [loadTasks, page]);
 
+  const summary = useMemo(
+    () =>
+      myTasks.reduce(
+        (counts, task) => {
+          const status = getStatus(task);
+          if (Object.hasOwn(counts, status)) counts[status] += 1;
+          return counts;
+        },
+        { assigned: 0, in_progress: 0, cleaned: 0 },
+      ),
+    [myTasks],
+  );
+  const totalTasks = myTasks.length;
   const activeCount = (summary?.assigned || 0) + (summary?.in_progress || 0);
   const inProgressCount = summary?.in_progress || 0;
   const cleanedCount = summary?.cleaned || 0;
@@ -134,24 +149,11 @@ export default function WorkerDashboard() {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
-      const previousStatus = getStatus(task);
-      const updatedStatus = getStatus(updatedTask);
-      setTasks((currentTasks) =>
+      setMyTasks((currentTasks) =>
         currentTasks.map((currentTask) =>
           currentTask.id === task.id ? updatedTask : currentTask,
         ),
       );
-      if (previousStatus !== updatedStatus) {
-        setSummary((currentSummary) =>
-          currentSummary
-            ? {
-                ...currentSummary,
-                [previousStatus]: Math.max(0, (currentSummary[previousStatus] || 0) - 1),
-                [updatedStatus]: (currentSummary[updatedStatus] || 0) + 1,
-              }
-            : currentSummary,
-        );
-      }
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -231,7 +233,7 @@ export default function WorkerDashboard() {
           <div className="h-[320px] w-full overflow-hidden rounded-xl">
             <LazyRender fallback={<div className="h-full animate-pulse bg-gray-100" />}>
               <Suspense fallback={<div className="h-full animate-pulse bg-gray-100" />}>
-                <WorkerTasksMap tasks={tasks} />
+                <WorkerTasksMap tasks={myTasks} />
               </Suspense>
             </LazyRender>
           </div>
@@ -310,14 +312,14 @@ export default function WorkerDashboard() {
                     </span>
                   </td>
                 </tr>
-              ) : tasks.length === 0 ? (
+              ) : myTasks.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-gray-500">
                     No tasks have been assigned to you yet.
                   </td>
                 </tr>
               ) : (
-                tasks.map((task) => {
+                myTasks.map((task) => {
                   const status = getStatus(task);
                   const coordinates = getCoordinates(task);
                   return (
@@ -392,7 +394,7 @@ export default function WorkerDashboard() {
       <PaginationControls
         page={page}
         totalPages={totalPages}
-        total={totalTasks}
+        total={totalReports}
         onPageChange={(nextPage) => {
           setLoading(true);
           setPage(nextPage);

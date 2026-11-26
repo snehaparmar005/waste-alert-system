@@ -824,7 +824,11 @@ def format_row(row: dict, include_image: bool = True) -> dict:
         "remarks": row.get("remarks") or "",
         "status": status,
         "reference_id": f"C2C-{int(row['id']):03d}",
-        "assigned_worker_id": row.get("assigned_worker_id"),
+        "assigned_worker_id": (
+            int(row["assigned_worker_id"])
+            if row.get("assigned_worker_id") is not None
+            else None
+        ),
         "assigned_worker_name": row.get("assigned_worker_name"),
         "description": row.get("description", ""),
         "created_at": created_at.isoformat()
@@ -981,8 +985,9 @@ def get_reports(
     user: dict = Depends(get_current_user),
 ):
     response.headers["Cache-Control"] = "private, max-age=15"
+    role = str(user.get("role", "")).lower()
     cache_key = (
-        f"reports:{user['id']}:{user['role']}:{page}:{limit}:"
+        f"reports:{user['id']}:{role}:{page}:{limit}:"
         f"{status or ''}:{category or ''}:{int(assigned_only)}:{int(legacy)}"
     )
     cached = get_cached_response(cache_key)
@@ -991,16 +996,17 @@ def get_reports(
 
     scope_clauses = []
     scope_params = []
-    if user["role"] == "citizen":
+    if role == "citizen":
         scope_clauses.append("r.user_id = %s")
         scope_params.append(user["id"])
-    elif user["role"] == "worker":
-        if assigned_only:
-            scope_clauses.append("r.assigned_worker_id = %s")
-            scope_params.append(user["id"])
-        else:
-            scope_clauses.append("(r.assigned_worker_id = %s OR r.user_id = %s)")
-            scope_params.extend((user["id"], user["id"]))
+    elif role == "worker":
+        scope_clauses.append(
+            "(r.assigned_worker_id = %s OR ("
+            "NOT EXISTS (SELECT 1 FROM reports AS worker_assignments "
+            "WHERE worker_assignments.assigned_worker_id = %s) "
+            "AND r.status IN ('assigned', 'in_progress')))"
+        )
+        scope_params.extend((user["id"], user["id"]))
     scope_sql = f" WHERE {' AND '.join(scope_clauses)}" if scope_clauses else ""
 
     filters = list(scope_clauses)
@@ -1114,6 +1120,8 @@ def patch_report(
 ) -> dict:
     updates = payload.dict(exclude_unset=True)
     role = str(user.get("role", "")).lower()
+    if payload.assigned_worker_id is not None:
+        updates["assigned_worker_id"] = int(payload.assigned_worker_id)
     if not updates:
         raise HTTPException(status_code=400, detail="At least one field must be provided.")
     if "status" in updates and updates["status"] is not None:
@@ -1232,7 +1240,18 @@ def patch_report(
                     detail="assigned_worker_id is required when setting status to 'assigned'.",
                 )
 
+            if assigned_worker_id is not None:
+                cur.execute(
+                    "UPDATE reports SET assigned_worker_id = %s, "
+                    "status = 'assigned' WHERE id = %s",
+                    (int(payload.assigned_worker_id), report_id),
+                )
             for field, value in updates.items():
+                if assigned_worker_id is not None and field in {
+                    "assigned_worker_id",
+                    "status",
+                }:
+                    continue
                 if value is not None:
                     cur.execute(
                         f"UPDATE reports SET {field} = %s WHERE id = %s",
