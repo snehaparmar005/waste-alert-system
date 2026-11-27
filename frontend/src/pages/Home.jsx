@@ -8,7 +8,7 @@ import { SpotCard } from "@/components/landing/SpotCard";
 import { Dashboard } from "@/components/landing/Dashboard";
 import { Phone } from "@/components/landing/Phone";
 import { BottleDoodle } from "@/components/landing/Doodles";
-import { Camera, Cpu, MapPin, BellRing, Menu, X, Leaf, Recycle, AlertTriangle, Map, ListChecks, BarChart3, CheckCircle2, ShieldCheck, Users, Sparkles } from "lucide-react";
+import { Camera, Cpu, MapPin, BellRing, Menu, X, Leaf, Recycle, AlertTriangle, Map, ListChecks, BarChart3, CheckCircle2, ShieldCheck, Users, Sparkles, LogIn } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import logo from "@/assets/logo.png";
 import * as C from "@/content/landing";
@@ -71,9 +71,9 @@ function Index() {
             {C.nav.map((n) => <li key={n.href}><a data-nav href={n.href} className="flex min-h-11 items-center rounded-full px-3 text-base font-medium text-ink hover:bg-tint">{n.label}</a></li>)}
           </ul>
           <div className="hidden items-center gap-2 lg:flex">
-            <Link to={C.links.report} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border-2 border-ink bg-accent px-5 py-1.5 text-sm font-bold text-ink shadow-[3px_3px_0_var(--ink)] transition hover:bg-accent/90">
-              <Camera className="h-4 w-4" />
-              Report Waste
+            <Link to="/login" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-[#159B43] px-5 py-1.5 text-sm font-bold text-white transition hover:bg-[#118037] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#159B43] focus-visible:ring-offset-2">
+              <LogIn className="h-4 w-4" />
+              Login
             </Link>
           </div>
           <button className="flex h-11 w-11 items-center justify-center rounded-lg text-ink lg:hidden focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setOpen(!open)} aria-label="Toggle menu" aria-expanded={open}>
@@ -83,7 +83,10 @@ function Index() {
         {open && <div className="border-t border-border bg-background px-4 pb-4 lg:hidden">
             {C.nav.map((n) => <a data-nav key={n.href} href={n.href} onClick={() => setOpen(false)} className="block py-3 font-medium text-ink">{n.label}</a>)}
             <div className="mt-3 grid gap-2">
-              <Link to={C.links.report} className={`${primary} py-2.5`}>Report Waste</Link>
+              <Link to="/login" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#159B43] px-6 py-3 font-semibold text-white transition hover:bg-[#118037] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#159B43] focus-visible:ring-offset-2">
+                <LogIn className="h-4 w-4" />
+                Login
+              </Link>
             </div>
           </div>}
       </header>
