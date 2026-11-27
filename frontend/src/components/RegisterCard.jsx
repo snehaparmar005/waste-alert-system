@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { apiRequest } from "../api/client";
 
@@ -39,10 +38,6 @@ export default function RegisterCard() {
             <span className="font-display text-xl font-extrabold text-ink">
               Click-2-<span className="text-primary">Clean</span>
             </span>
-          </Link>
-          <Link to="/" className="flex min-h-11 items-center gap-1 font-medium text-ink hover:text-primary">
-            <ArrowLeft className="h-4 w-4" />
-            Home
           </Link>
         </div>
       </header>

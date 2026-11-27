@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Camera, MapPin, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Camera, MapPin, CheckCircle2 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { submitReport } from "@/lib/api";
 
@@ -79,7 +79,6 @@ export default function Report() {
             <img src={logo} alt="" width={36} height={36} className="h-9 w-9 object-contain" />
             <span className="font-display text-xl font-extrabold text-slate-800">Click-2-<span className="text-teal-700">Clean</span></span>
           </Link>
-          <Link to="/" className="flex min-h-11 items-center gap-1.5 font-medium text-slate-600 hover:text-teal-700"><ArrowLeft className="h-4 w-4" />Home</Link>
         </div>
       </header>
 
