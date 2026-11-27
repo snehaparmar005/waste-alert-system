@@ -25,6 +25,30 @@ export function getImageUrl(path) {
   return `${API_BASE}${path}`;
 }
 
+export function normalizeReportsResponse(data) {
+  let items;
+  let pagination = {};
+
+  if (Array.isArray(data)) {
+    items = data;
+  } else if (data && typeof data === "object") {
+    items = [data.items, data.reports, data.data].find(Array.isArray);
+    if (!items) {
+      throw new TypeError("Reports response must contain an array.");
+    }
+    pagination = data;
+  } else {
+    throw new TypeError("Reports response must be an array or an object containing one.");
+  }
+
+  return {
+    items,
+    total: pagination.total ?? items.length,
+    page: pagination.page ?? 1,
+    total_pages: pagination.total_pages ?? (items.length ? 1 : 0),
+  };
+}
+
 export async function apiRequest(path, options = {}) {
   const session = getSession();
   const headers = new Headers(options.headers || {});

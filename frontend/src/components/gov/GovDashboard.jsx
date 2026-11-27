@@ -13,7 +13,7 @@ import {
   TileLayer,
   useMap,
 } from "react-leaflet";
-import { apiRequest, getSession } from "../../api/client";
+import { apiRequest, getSession, normalizeReportsResponse } from "../../api/client";
 import { openInMaps } from "../../utils/openMap";
 
 const MAP_CENTER = [26.2183, 78.1828];
@@ -102,8 +102,9 @@ export default function GovDashboard() {
 
   const loadReports = useCallback(async () => {
     try {
-      const data = await apiRequest("/api/reports");
-      setReports(Array.isArray(data) ? data : []);
+      const res = await apiRequest("/api/reports");
+      const { items } = normalizeReportsResponse(res);
+      setReports(items);
       setError("");
     } catch (requestError) {
       setError(requestError.message);

@@ -6,7 +6,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { apiRequest } from "../../api/client";
+import { apiRequest, normalizeReportsResponse } from "../../api/client";
 import ReportUpdateModal from "../ReportUpdateModal";
 
 function getStatus(report) {
@@ -42,8 +42,9 @@ export default function AdminReports() {
     let active = true;
     const timer = window.setTimeout(() => {
       apiRequest("/api/reports")
-        .then((data) => {
-          if (active) setReports(Array.isArray(data) ? data : []);
+        .then((res) => {
+          const { items } = normalizeReportsResponse(res);
+          if (active) setReports(items);
         })
         .catch((requestError) => {
           if (active) setError(requestError.message);

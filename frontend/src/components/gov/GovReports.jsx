@@ -5,7 +5,7 @@ import {
   LoaderCircle,
   Pencil,
 } from "lucide-react";
-import { apiRequest } from "../../api/client";
+import { apiRequest, normalizeReportsResponse } from "../../api/client";
 import ReportUpdateModal from "../ReportUpdateModal";
 
 const STATUS_OPTIONS = [
@@ -59,8 +59,9 @@ export default function GovReports() {
 
   const loadReports = useCallback(async () => {
     try {
-      const data = await apiRequest("/api/reports");
-      setReports(Array.isArray(data) ? data : []);
+      const res = await apiRequest("/api/reports");
+      const { items } = normalizeReportsResponse(res);
+      setReports(items);
       setError("");
     } catch (requestError) {
       setError(requestError.message);

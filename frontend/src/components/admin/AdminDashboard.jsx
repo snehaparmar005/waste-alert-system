@@ -11,7 +11,11 @@ import {
   Trash2,
   Truck,
 } from "lucide-react";
-import { apiRequest, getSession } from "../../api/client";
+import {
+  apiRequest,
+  getSession,
+  normalizeReportsResponse,
+} from "../../api/client";
 import { openInMaps } from "../../utils/openMap";
 
 function getStatus(report) {
@@ -38,7 +42,10 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     apiRequest("/api/reports")
-      .then((data) => setReports(Array.isArray(data) ? data : []))
+      .then((res) => {
+        const { items } = normalizeReportsResponse(res);
+        setReports(items);
+      })
       .catch((err) => setError(err.message));
   }, []);
 

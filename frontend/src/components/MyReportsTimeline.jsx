@@ -12,7 +12,7 @@ import {
   Save,
   X,
 } from "lucide-react";
-import { apiRequest } from "../api/client";
+import { apiRequest, normalizeReportsResponse } from "../api/client";
 import { openInMaps } from "../utils/openMap";
 
 const WASTE_TYPES = [
@@ -96,8 +96,9 @@ export default function MyReportsTimeline() {
 
   const loadReports = useCallback(async () => {
     try {
-      const data = await apiRequest("/api/reports");
-      setReports(Array.isArray(data) ? data : []);
+      const res = await apiRequest("/api/reports");
+      const { items } = normalizeReportsResponse(res);
+      setReports(items);
       setError("");
     } catch (requestError) {
       setError(requestError.message);

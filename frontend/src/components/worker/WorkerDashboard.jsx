@@ -11,7 +11,12 @@ import {
   Truck,
 } from "lucide-react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
-import { apiRequest, getImageUrl, getSession } from "../../api/client";
+import {
+  apiRequest,
+  getImageUrl,
+  getSession,
+  normalizeReportsResponse,
+} from "../../api/client";
 import { openInMaps } from "../../utils/openMap";
 
 const MAP_CENTER = [26.2183, 78.1828];
@@ -80,11 +85,14 @@ export default function WorkerDashboard() {
 
   const loadTasks = useCallback(async () => {
     try {
-      const data = await apiRequest("/api/reports");
-      const reports = Array.isArray(data) ? data : [];
+      const res = await apiRequest("/api/reports");
+      const { items: reports } = normalizeReportsResponse(res);
       setTasks(
         reports.filter(
-          (report) => String(report.assigned_worker_id) === String(user?.id),
+          (report) =>
+            String(report.assigned_worker_id) === String(user?.id) ||
+            (report.assigned_worker_id == null &&
+              ["assigned", "in_progress", "cleaned"].includes(getStatus(report))),
         ),
       );
       setError("");

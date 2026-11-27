@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
-import { apiRequest } from "../../api/client";
+import { apiRequest, normalizeReportsResponse } from "../../api/client";
 
 export default function GovReportDetail() {
   const { id } = useParams();
@@ -14,7 +14,16 @@ export default function GovReportDetail() {
       .then(setReport)
       .catch(() => {
         apiRequest("/api/reports")
-          .then((list) => setReport(list.find((item) => String(item.id) === String(id))))
+          .then((res) => {
+            const { items } = normalizeReportsResponse(res);
+            const matchingReport = items.find(
+              (item) => String(item.id) === String(id),
+            );
+            if (!matchingReport) {
+              throw new Error(`Report #${id} was not found.`);
+            }
+            setReport(matchingReport);
+          })
           .catch((err) => setError(err.message));
       });
   }, [id]);
