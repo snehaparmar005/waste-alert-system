@@ -8,7 +8,7 @@ import { SpotCard } from "@/components/landing/SpotCard";
 import { Dashboard } from "@/components/landing/Dashboard";
 import { Phone } from "@/components/landing/Phone";
 import { BottleDoodle } from "@/components/landing/Doodles";
-import { Camera, Cpu, MapPin, BellRing, Menu, X, Leaf, Recycle, AlertTriangle, Map, ListChecks, BarChart3, CheckCircle2, ArrowRight, ShieldCheck, Users, Sparkles } from "lucide-react";
+import { Camera, Cpu, MapPin, BellRing, Menu, X, Leaf, Recycle, AlertTriangle, Map, ListChecks, BarChart3, CheckCircle2, ShieldCheck, Users, Sparkles } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import logo from "@/assets/logo.png";
 import * as C from "@/content/landing";
@@ -71,12 +71,6 @@ function Index() {
             {C.nav.map((n) => <li key={n.href}><a data-nav href={n.href} className="flex min-h-11 items-center rounded-full px-3 text-base font-medium text-ink hover:bg-tint">{n.label}</a></li>)}
           </ul>
           <div className="hidden items-center gap-2 lg:flex">
-            <Link to="/login" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border-2 border-[#159B43] bg-[#159B43] px-5 py-1.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#118037]">
-              Portal Login
-            </Link>
-            <Link to={C.links.admin} className="inline-flex min-h-10 items-center justify-center rounded-full border-2 border-ink bg-card px-4 py-1.5 text-sm font-bold text-ink transition hover:bg-tint">
-              Admin Login
-            </Link>
             <Link to={C.links.report} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border-2 border-ink bg-accent px-5 py-1.5 text-sm font-bold text-ink shadow-[3px_3px_0_var(--ink)] transition hover:bg-accent/90">
               <Camera className="h-4 w-4" />
               Report Waste
@@ -90,8 +84,6 @@ function Index() {
             {C.nav.map((n) => <a data-nav key={n.href} href={n.href} onClick={() => setOpen(false)} className="block py-3 font-medium text-ink">{n.label}</a>)}
             <div className="mt-3 grid gap-2">
               <Link to={C.links.report} className={`${primary} py-2.5`}>Report Waste</Link>
-              <Link to="/login" className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#159B43] px-6 py-2.5 font-bold text-white">Portal Login</Link>
-              <Link to={C.links.admin} className={`${outline} py-2.5`}>Admin Login</Link>
             </div>
           </div>}
       </header>
@@ -153,7 +145,6 @@ function Index() {
                 >
                   <Camera className="h-5 w-5" />
                   <span>Report Waste</span>
-                  <ArrowRight className="h-4 w-4" />
                 </Link>
 
                 <Link
