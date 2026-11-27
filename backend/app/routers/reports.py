@@ -3,7 +3,7 @@ import secrets
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy.orm import Session, aliased, load_only
 
 from ..config import MAX_UPLOAD_BYTES, UPLOAD_DIR
 from ..database import get_db
@@ -133,9 +133,11 @@ def list_reports(
     total = db.scalar(
         select(func.count(Report.id)).where(*conditions)
     ) or 0
+    worker = aliased(User)
     statement = (
-        select(Report, User.name)
+        select(Report, User.name, worker.name)
         .outerjoin(User, Report.user_id == User.id)
+        .outerjoin(worker, Report.assigned_worker_id == worker.id)
         .options(load_only(*_LIST_COLUMNS))
         .where(*conditions)
         .order_by(Report.id.desc())
@@ -143,7 +145,10 @@ def list_reports(
         .limit(limit)
     )
     rows = db.execute(statement).all()
-    items = [report_out(report, user_name) for report, user_name in rows]
+    items = [
+        report_out(report, user_name, worker_name)
+        for report, user_name, worker_name in rows
+    ]
     result = {
         "items": [item.model_dump(mode="json") for item in items],
         "total": total,
@@ -228,17 +233,19 @@ def get_report(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
+    worker = aliased(User)
     row = db.execute(
-        select(Report, User.name)
+        select(Report, User.name, worker.name)
         .outerjoin(User, Report.user_id == User.id)
+        .outerjoin(worker, Report.assigned_worker_id == worker.id)
         .where(Report.id == report_id)
     ).first()
     if row is None:
         raise HTTPException(404, "Report not found.")
-    report, user_name = row
+    report, user_name, worker_name = row
     if not _report_visible_to_user(report, current_user):
         raise HTTPException(403, "You do not have permission to view this report.")
-    return report_out(report, user_name)
+    return report_out(report, user_name, worker_name)
 
 
 @router.patch("/{report_id}", response_model=ReportOut)
@@ -305,14 +312,16 @@ def update_report(
         report.note = report.description
 
     db.commit()
+    worker = aliased(User)
     row = db.execute(
-        select(Report, User.name)
+        select(Report, User.name, worker.name)
         .outerjoin(User, Report.user_id == User.id)
+        .outerjoin(worker, Report.assigned_worker_id == worker.id)
         .where(Report.id == report_id)
     ).first()
-    updated_report, user_name = row
+    updated_report, user_name, worker_name = row
     invalidate_reports_cache()
-    return report_out(updated_report, user_name)
+    return report_out(updated_report, user_name, worker_name)
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)

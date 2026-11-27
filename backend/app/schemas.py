@@ -72,6 +72,7 @@ class ReportOut(BaseModel):
     user_id: int | None
     user_name: str | None
     assigned_worker_id: int | None
+    assigned_worker_name: str | None
     status: str
     created_at: datetime
 
@@ -155,7 +156,11 @@ class StatsOut(BaseModel):
     by_category: dict[str, int]
 
 
-def report_out(r, user_name: str | None = None) -> ReportOut:
+def report_out(
+    r,
+    user_name: str | None = None,
+    assigned_worker_name: str | None = None,
+) -> ReportOut:
     labels = {
         "wet": "Wet",
         "dry": "Dry",
@@ -181,6 +186,7 @@ def report_out(r, user_name: str | None = None) -> ReportOut:
         user_id=r.user_id,
         user_name=user_name,
         assigned_worker_id=r.assigned_worker_id,
+        assigned_worker_name=assigned_worker_name,
         status=r.status,
         created_at=r.created_at,
     )

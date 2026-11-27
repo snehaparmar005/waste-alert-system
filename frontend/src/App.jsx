@@ -35,7 +35,7 @@ function RouteLoading() {
 
 function getHomePath(role) {
   if (role === "admin") return "/admin/dashboard";
-  if (role === "gov") return "/gov/dashboard";
+  if (role === "gov" || role === "officer") return "/gov/dashboard";
   if (role === "worker") return "/worker/dashboard";
   return "/citizen/report";
 }
@@ -122,15 +122,15 @@ export default function App() {
         {/* Gov (Nagar Nigam) Portal */}
         <Route
           path="/gov/dashboard"
-          element={user?.role === "gov" ? withShell(<GovDashboard />) : <Navigate to="/login" replace />}
+          element={["gov", "officer"].includes(user?.role) ? withShell(<GovDashboard />) : <Navigate to="/login" replace />}
         />
         <Route
           path="/gov/reports"
-          element={user?.role === "gov" ? withShell(<GovReports />) : <Navigate to="/login" replace />}
+          element={["gov", "officer"].includes(user?.role) ? withShell(<GovReports />) : <Navigate to="/login" replace />}
         />
         <Route
           path="/gov/workers"
-          element={user?.role === "gov" ? withShell(<GovWorkers />) : <Navigate to="/login" replace />}
+          element={["gov", "officer"].includes(user?.role) ? withShell(<GovWorkers />) : <Navigate to="/login" replace />}
         />
 
         {/* Admin Portal */}

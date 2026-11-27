@@ -13,6 +13,7 @@ import { apiRequest, getSession, saveSession } from "../api/client";
 const ROLE_LABELS = {
   citizen: "Citizen",
   gov: "Nagar Nigam Officer",
+  officer: "Nagar Nigam Officer",
   worker: "Field Worker",
   admin: "System Admin",
 };

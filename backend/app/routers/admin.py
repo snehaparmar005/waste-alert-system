@@ -71,9 +71,8 @@ def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db)):
     user.name = name
     user.email = email
     user.role = body.role
-    if user.role != body.role:
-        invalidate_reports_cache()
     db.commit()
+    invalidate_reports_cache()
     return PortalUserOut(id=user.id, name=user.name, email=user.email, role=user.role)
 
 

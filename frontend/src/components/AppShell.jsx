@@ -48,6 +48,7 @@ function BrandLogo({ className = "h-9 w-9" }) {
 const ROLE_LABELS = {
   citizen: "Citizen",
   gov: "Nagar Nigam Officer",
+  officer: "Nagar Nigam Officer",
   worker: "Field Worker",
   admin: "System Admin",
 };
@@ -90,7 +91,7 @@ export default function AppShell({ user, onLogout, children }) {
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
   const navigate = useNavigate();
-  const role = user?.role;
+  const role = user?.role === "officer" ? "gov" : user?.role;
 
   const loadNotifications = useCallback(async () => {
     try {

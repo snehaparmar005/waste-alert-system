@@ -29,7 +29,7 @@ export default function LoginCard({ onAuthSuccess }) {
 
       const role = data?.user?.role;
       if (role === "admin") navigate("/admin/dashboard");
-      else if (role === "gov") navigate("/gov/dashboard");
+      else if (role === "gov" || role === "officer") navigate("/gov/dashboard");
       else if (role === "worker") navigate("/worker/dashboard");
       else navigate("/citizen/report");
     } catch (err) {
