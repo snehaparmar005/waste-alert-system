@@ -6,7 +6,6 @@ import {
   LoaderCircle,
   MapPin,
   MapPinned,
-  Navigation,
   RefreshCw,
   Truck,
 } from "lucide-react";
@@ -37,11 +36,9 @@ function getReferenceId(report) {
 }
 
 function getCoordinates(report) {
-  const latitude = Number(report.latitude);
-  const longitude = Number(report.longitude);
+  const latitude = Number(report.latitude ?? report.lat);
+  const longitude = Number(report.longitude ?? report.lng);
   if (
-    report.latitude == null ||
-    report.longitude == null ||
     !Number.isFinite(latitude) ||
     !Number.isFinite(longitude) ||
     latitude < -90 ||
@@ -53,6 +50,34 @@ function getCoordinates(report) {
     return null;
   }
   return [latitude, longitude];
+}
+
+function getMapUrl(report) {
+  const lat = Number(report.latitude ?? report.lat);
+  const lng = Number(report.longitude ?? report.lng);
+  if (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180 &&
+    !(lat === 0 && lng === 0)
+  ) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  }
+
+  const location = [
+    report.ward,
+    report.address,
+    report.location,
+    report.remarks,
+    report.description,
+  ]
+    .filter((value) => typeof value === "string" && value.trim())
+    .join(", ");
+  const query = location || `Waste report ${getReferenceId(report)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
 function getStatusStyle(status) {
@@ -370,15 +395,15 @@ export default function WorkerDashboard() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-4">
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            disabled={!coordinates}
-                            onClick={() => coordinates && openInMaps(coordinates[0], coordinates[1])}
-                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-semibold text-[#0B4650] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          <a
+                            href={getMapUrl(task)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#159B43] px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-[#118037] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#159B43] focus-visible:ring-offset-2"
                           >
-                            <Navigation className="h-3.5 w-3.5" />
+                            <MapPin className="h-3.5 w-3.5" />
                             Open with Map
-                          </button>
+                          </a>
                           {status === "assigned" && (
                             <button
                               type="button"
