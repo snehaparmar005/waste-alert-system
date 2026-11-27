@@ -1,13 +1,109 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Report
-from ..schemas import CATEGORIES, STATUSES, ReportOut, StatsOut, StatusUpdate, report_out
-from ..security import get_current_admin
+from ..models import Report, User
+from ..report_cache import invalidate_reports_cache
+from ..schemas import (
+    CATEGORIES,
+    ROLES,
+    STATUSES,
+    PortalUserOut,
+    ReportOut,
+    StatsOut,
+    StatusUpdate,
+    UserCreate,
+    UserUpdate,
+    report_out,
+)
+from ..security import AuthenticatedUser, get_current_admin, hash_password
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
+
+
+def _validate_account(name: str, email: str, role: str) -> tuple[str, str]:
+    name = name.strip()
+    email = email.strip().lower()
+    if not name or len(name) > 120:
+        raise HTTPException(422, "Enter a name between 1 and 120 characters.")
+    if "@" not in email or len(email) > 254:
+        raise HTTPException(422, "Enter a valid email address.")
+    if role not in ROLES:
+        raise HTTPException(422, "Unknown account role.")
+    return name, email
+
+
+@router.get("/users", response_model=list[PortalUserOut])
+def list_users(db: Session = Depends(get_db)):
+    users = db.scalars(select(User).order_by(User.id)).all()
+    return [PortalUserOut(id=user.id, name=user.name, email=user.email, role=user.role) for user in users]
+
+
+@router.post("/users", response_model=PortalUserOut, status_code=status.HTTP_201_CREATED)
+def create_user(body: UserCreate, db: Session = Depends(get_db)):
+    name, email = _validate_account(body.name, body.email, body.role)
+    if len(body.password) < 6:
+        raise HTTPException(422, "Password must be at least 6 characters.")
+    if db.scalar(select(User).where(User.email == email)) is not None:
+        raise HTTPException(409, "An account with this email already exists.")
+    user = User(
+        name=name,
+        email=email,
+        password_hash=hash_password(body.password),
+        role=body.role,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return PortalUserOut(id=user.id, name=user.name, email=user.email, role=user.role)
+
+
+@router.put("/users/{user_id}", response_model=PortalUserOut)
+def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "User not found.")
+    name, email = _validate_account(body.name, body.email, body.role)
+    existing = db.scalar(select(User).where(User.email == email, User.id != user_id))
+    if existing is not None:
+        raise HTTPException(409, "An account with this email already exists.")
+    user.name = name
+    user.email = email
+    user.role = body.role
+    if user.role != body.role:
+        invalidate_reports_cache()
+    db.commit()
+    return PortalUserOut(id=user.id, name=user.name, email=user.email, role=user.role)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AuthenticatedUser = Depends(get_current_admin),
+):
+    if user_id == current_admin.id:
+        raise HTTPException(400, "You cannot delete your own account.")
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "User not found.")
+    if user.role == "admin":
+        admin_count = db.scalar(
+            select(func.count(User.id)).where(User.role == "admin")
+        ) or 0
+        if admin_count <= 1:
+            raise HTTPException(409, "The last administrator account cannot be deleted.")
+    db.execute(update(Report).where(Report.user_id == user_id).values(user_id=None))
+    db.execute(
+        update(Report)
+        .where(Report.assigned_worker_id == user_id)
+        .values(assigned_worker_id=None)
+    )
+    db.delete(user)
+    db.commit()
+    invalidate_reports_cache()
+    return None
 
 
 @router.get("/reports", response_model=list[ReportOut])
@@ -50,4 +146,5 @@ def update_status(report_id: int, body: StatusUpdate, db: Session = Depends(get_
     report.status = body.status
     db.commit()
     db.refresh(report)
+    invalidate_reports_cache()
     return report_out(report)

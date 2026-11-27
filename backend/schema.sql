@@ -16,6 +16,16 @@ CREATE TABLE IF NOT EXISTS admin_users (
   password_hash VARCHAR(255) NOT NULL
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS users (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(120) NOT NULL,
+  email         VARCHAR(254) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role          VARCHAR(20)  NOT NULL,
+  created_at    DATETIME     NOT NULL,
+  INDEX ix_users_role (role)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS reports (
   id             INT AUTO_INCREMENT PRIMARY KEY,
   tracking_code  VARCHAR(16)  NOT NULL UNIQUE,
@@ -24,9 +34,16 @@ CREATE TABLE IF NOT EXISTS reports (
   photo_filename VARCHAR(100) NOT NULL,
   latitude       DOUBLE       NULL,
   longitude      DOUBLE       NULL,
-  status         VARCHAR(20)  NOT NULL DEFAULT 'reported',  -- reported | in_progress | resolved
+  user_id        INT          NULL,
+  assigned_worker_id INT      NULL,
+  ward           VARCHAR(120) NULL,
+  description    TEXT         NULL,
+  remarks        TEXT         NULL,
+  status         VARCHAR(20)  NOT NULL DEFAULT 'reported',  -- reported | submitted | assigned | in_progress | cleaned | rejected | resolved
   created_at     DATETIME     NOT NULL,            -- UTC
   updated_at     DATETIME     NOT NULL,            -- UTC
+  INDEX ix_reports_user_id (user_id),
+  INDEX ix_reports_assigned_worker_id (assigned_worker_id),
   INDEX ix_reports_status (status),
   INDEX ix_reports_category (category),
   INDEX ix_reports_created_at (created_at)

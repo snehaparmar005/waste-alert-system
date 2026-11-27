@@ -29,3 +29,4 @@ MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
