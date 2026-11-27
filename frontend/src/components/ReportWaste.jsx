@@ -106,6 +106,7 @@ export default function ReportWaste() {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const geocodeSequence = useRef(0);
+  const geocodeController = useRef(null);
 
   const position = useMemo(() => {
     if (!latitude || !longitude) return null;
@@ -137,6 +138,10 @@ export default function ReportWaste() {
   const fetchReadableAddress = useCallback(async (lat, lng) => {
     const requestId = geocodeSequence.current + 1;
     geocodeSequence.current = requestId;
+    geocodeController.current?.abort();
+    const controller = new AbortController();
+    geocodeController.current = controller;
+    const timeoutId = window.setTimeout(() => controller.abort(), 3000);
     setGeocoding(true);
     setDetectedAddress("Looking up the selected location...");
     try {
@@ -144,7 +149,10 @@ export default function ReportWaste() {
         `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(
           lat,
         )}&lon=${encodeURIComponent(lng)}`,
-        { headers: { "Accept-Language": "en" } },
+        {
+          headers: { "Accept-Language": "en" },
+          signal: controller.signal,
+        },
       );
       if (!response.ok) {
         throw new Error(`Address lookup failed with status ${response.status}.`);
@@ -161,7 +169,11 @@ export default function ReportWaste() {
         );
       }
     } finally {
-      if (requestId === geocodeSequence.current) setGeocoding(false);
+      window.clearTimeout(timeoutId);
+      if (requestId === geocodeSequence.current) {
+        geocodeController.current = null;
+        setGeocoding(false);
+      }
     }
   }, []);
 
@@ -208,7 +220,7 @@ export default function ReportWaste() {
           );
         }
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 },
     );
   }, [fetchReadableAddress]);
 
@@ -222,6 +234,14 @@ export default function ReportWaste() {
       if (preview) URL.revokeObjectURL(preview);
     },
     [preview],
+  );
+
+  useEffect(
+    () => () => {
+      geocodeSequence.current += 1;
+      geocodeController.current?.abort();
+    },
+    [],
   );
 
   const handlePositionChange = (lat, lng) => {

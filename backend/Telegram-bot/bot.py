@@ -2,7 +2,6 @@ import os
 import json
 from pathlib import Path
 import numpy as np
-import tensorflow as tf
 from PIL import Image
 from dotenv import load_dotenv
 from telegram import Update
@@ -16,12 +15,26 @@ MODEL_PATH = BASE_DIR / "waste_classifier (2).keras"
 CLASS_NAMES_PATH = BASE_DIR / "class_names (2).json"
 PHOTOS_DIR = BASE_DIR / "received_photos"
 
-model = tf.keras.models.load_model(MODEL_PATH)
+model = None
 
 with open(CLASS_NAMES_PATH, "r") as file:
     class_names = json.load(file)
 
-print("AI Waste Classification Model Loaded Successfully!")
+
+def predict_waste(image_path):
+    global model
+    if model is None:
+        import tensorflow as tf
+
+        model = tf.keras.models.load_model(MODEL_PATH)
+
+    image = Image.open(image_path).convert("RGB")
+    image = image.resize((224, 224))
+    image_array = np.array(image, dtype=np.float32)
+    image_array = np.expand_dims(image_array, axis=0)
+    predictions = model.predict(image_array, verbose=0)
+    predicted_index = int(np.argmax(predictions[0]))
+    return class_names[predicted_index], float(predictions[0][predicted_index])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -75,18 +88,7 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await image_file.download_to_drive(image_path)
 
     try:
-        image = Image.open(image_path).convert("RGB")
-        image = image.resize((224, 224))
-
-        image_array = np.array(image, dtype=np.float32)
-        image_array = np.expand_dims(image_array, axis=0)
-
-        predictions = model.predict(image_array, verbose=0)
-
-        predicted_index = int(np.argmax(predictions[0]))
-        confidence = float(predictions[0][predicted_index])
-
-        predicted_class = class_names[predicted_index]
+        predicted_class, confidence = predict_waste(image_path)
 
         await update.message.reply_text(
             f"♻️ Waste Classification Result\n\n"
